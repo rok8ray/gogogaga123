@@ -1,147 +1,453 @@
 <!doctype html>
-<html>
-  <head>
-    <title>Real-Time Chat</title>
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <style>
-      body {
-        font-family:
-          -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica,
-          Arial, sans-serif;
-        margin: 0;
-        padding-bottom: 3rem;
-        background: #f4f4f9;
-      }
+<html lang="en">
+    <head>
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <title>Chat Servers</title>
+        <style>
+            :root {
+                --bg-dark: #202225;
+                --bg-sidebar: #2f3136;
+                --bg-chat: #36393f;
+                --text-main: #dcddde;
+                --accent: #5865f2;
+            }
+            body {
+                margin: 0;
+                display: flex;
+                height: 100vh;
+                font-family: sans-serif;
+                background: var(--bg-dark);
+                color: var(--text-main);
+                overflow: hidden;
+            }
 
-      #messages {
-        list-style-type: none;
-        margin: 0;
-        padding: 1rem;
-        display: flex;
-        flex-direction: column;
-      }
-      #messages li {
-        padding: 0.5rem 1rem;
-        margin-bottom: 10px;
-        background: white;
-        border-radius: 8px;
-        box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
-        max-width: 80%;
-      }
+            /* Sidebar for Servers */
+            #server-sidebar {
+                width: 72px;
+                background: var(--bg-dark);
+                display: flex;
+                flex-direction: column;
+                align-items: center;
+                padding-top: 12px;
+                gap: 8px;
+                border-right: 1px solid #222;
+            }
+            .server-icon {
+                width: 48px;
+                height: 48px;
+                background: var(--bg-sidebar);
+                border-radius: 50%;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                cursor: pointer;
+                transition: 0.2s;
+                font-weight: bold;
+            }
+            .server-icon:hover,
+            .server-icon.active {
+                border-radius: 30%;
+                background: var(--accent);
+                color: white;
+            }
 
-      .announcement {
-        background: none !important;
-        box-shadow: none !important;
-        font-style: italic;
-        color: #888;
-        align-self: center;
-        font-size: 0.9rem;
-      }
-      .time {
-        font-size: 0.7rem;
-        color: #999;
-        margin-left: 8px;
-      }
-      .username {
-        font-weight: bold;
-        color: #2e7d32;
-      }
+            /* Channel Sidebar */
+            #channel-sidebar {
+                width: 240px;
+                background: var(--bg-sidebar);
+                padding: 20px;
+                display: flex;
+                flex-direction: column;
+            }
 
-      #form {
-        background: #fff;
-        padding: 0.5rem;
-        position: fixed;
-        bottom: 0;
-        left: 0;
-        right: 0;
-        display: flex;
-        height: 3rem;
-        box-sizing: border-box;
-        border-top: 1px solid #ddd;
-      }
-      #input {
-        border: none;
-        padding: 0 1rem;
-        flex-grow: 1;
-        border-radius: 2rem;
-        background: #eee;
-        margin: 0.25rem;
-      }
-      #input:focus {
-        outline: none;
-      }
-      #form button {
-        background: #2e7d32;
-        border: none;
-        padding: 0 1.5rem;
-        margin: 0.25rem;
-        border-radius: 3px;
-        color: #fff;
-        font-weight: bold;
-        cursor: pointer;
-      }
-    </style>
-  </head>
-  <body>
-    <ul id="messages"></ul>
+            /* Chat Area */
+            #chat-container {
+                flex-grow: 1;
+                background: var(--bg-chat);
+                display: flex;
+                flex-direction: column;
+            }
+            #messages {
+                flex-grow: 1;
+                overflow-y: auto;
+                padding: 20px;
+                list-style: none;
+                margin: 0;
+            }
+            #messages li {
+                margin-bottom: 15px;
+            }
+            .msg-user {
+                font-weight: bold;
+                color: white;
+                margin-right: 8px;
+            }
+            .msg-time {
+                font-size: 0.75rem;
+                color: #72767d;
+            }
 
-    <form id="form">
-      <input
-        id="input"
-        autocomplete="off"
-        placeholder="Type a message..."
-      /><button>Send</button>
-    </form>
+            /* Input */
+            #input-area {
+                padding: 20px;
+            }
+            #msg-input {
+                width: 100%;
+                padding: 12px;
+                border-radius: 8px;
+                border: none;
+                background: #40444b;
+                color: white;
+                box-sizing: border-box;
+            }
 
-    <script src="/socket.io/socket.io.js"></script>
-    <script>
-      const socket = io();
+            /* Auth UI */
+            #auth-overlay {
+                position: fixed;
+                inset: 0;
+                background: #202225;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                z-index: 1000;
+            }
+            .auth-card {
+                background: #36393f;
+                padding: 30px;
+                border-radius: 8px;
+                width: 300px;
+                display: flex;
+                flex-direction: column;
+                gap: 15px;
+            }
+            input[type="email"],
+            input[type="password"] {
+                padding: 10px;
+                border-radius: 4px;
+                border: none;
+                background: #202225;
+                color: white;
+            }
+            button {
+                padding: 10px;
+                background: var(--accent);
+                border: none;
+                color: white;
+                border-radius: 4px;
+                cursor: pointer;
+                font-weight: bold;
+            }
 
-      // Ask for name
-      const userName = prompt("Enter your username:") || "Anonymous";
-      socket.emit("user joined", userName);
+            hr {
+                border: 0;
+                border-top: 1px solid #444;
+                width: 100%;
+                margin: 10px 0;
+            }
+        </style>
+    </head>
+    <body>
+        <div id="auth-overlay">
+            <div class="auth-card">
+                <h2 style="margin: 0">Welcome!</h2>
+                <input type="email" id="email" placeholder="Email" />
+                <input type="password" id="password" placeholder="Password" />
+                <button onclick="handleAuth('login')">Login</button>
+                <button
+                    onclick="handleAuth('register')"
+                    style="background: #444"
+                >
+                    Register
+                </button>
+            </div>
+        </div>
 
-      const form = document.getElementById("form");
-      const input = document.getElementById("input");
-      const messages = document.getElementById("messages");
+        <div id="server-sidebar">
+            <div
+                class="server-icon"
+                onclick="createServer()"
+                title="Create Server"
+            >
+                +
+            </div>
+            <div class="server-icon" onclick="joinServer()" title="Join Server">
+                🔍
+            </div>
+            <hr />
+            <div id="server-list"></div>
+        </div>
 
-      form.addEventListener("submit", (e) => {
-        e.preventDefault();
-        if (input.value) {
-          socket.emit("chat message", { user: userName, text: input.value });
-          input.value = "";
-        }
-      });
+        <div id="channel-sidebar">
+            <h3 id="current-server-name">Select a Server</h3>
+            <p id="invite-display"></p>
 
-      // Listen for regular messages
-      socket.on("chat message", (data) => {
-        const item = document.createElement("li");
-        item.innerHTML = `<span class="username">${data.user}</span><span class="time">${data.time}</span><br>${data.text}`;
-        messages.appendChild(item);
-        window.scrollTo(0, document.body.scrollHeight);
-      });
+            <button
+                id="delete-btn"
+                onclick="deleteCurrentServer()"
+                style="display: none; background: #f04747; margin-bottom: 10px"
+            >
+                Delete Server
+            </button>
 
-      // Listen for announcements (join/leave)
-      socket.on("announcement", (text) => {
-        const item = document.createElement("li");
-        item.className = "announcement";
-        item.textContent = text;
-        messages.appendChild(item);
-        window.scrollTo(0, document.body.scrollHeight);
-      });
+            <button
+                onclick="logout()"
+                style="margin-top: auto; background: #444"
+            >
+                Logout
+            </button>
+        </div>
 
-      // Add this inside your <script> tag in index.html
+        <div id="chat-container">
+            <ul id="messages"></ul>
+            <form id="input-area">
+                <input
+                    id="msg-input"
+                    placeholder="Select a server to start chatting..."
+                    disabled
+                />
+            </form>
+        </div>
 
-      // Listen for the history dump when you first connect
-      socket.on("load history", (history) => {
-        messages.innerHTML = ""; // Clear current view
-        history.forEach((data) => {
-          const item = document.createElement("li");
-          item.innerHTML = `<span class="username">${data.user}</span><span class="time">${data.time}</span><br>${data.text}`;
-          messages.appendChild(item);
-        });
-        window.scrollTo(0, document.body.scrollHeight);
-      });
-    </script>
-  </body>
+        <script type="module">
+            import {
+                getFirestore,
+                collection,
+                addDoc,
+                query,
+                where,
+                orderBy,
+                onSnapshot,
+                serverTimestamp,
+                getDocs,
+                deleteDoc,
+                doc
+            } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+            import {
+                getAuth,
+                createUserWithEmailAndPassword,
+                signInWithEmailAndPassword,
+                onAuthStateChanged,
+                signOut,
+            } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
+
+            // --- REPLACE THIS WITH YOUR CONFIG FROM FIREBASE ---
+            const firebaseConfig = {
+                apiKey: "AIzaSyCRB2celD-ShWGOIXm2fpYLQXz36IB5vfE",
+                authDomain: "schoolchat-e20ed.firebaseapp.com",
+                projectId: "schoolchat-e20ed",
+                storageBucket: "schoolchat-e20ed.firebasestorage.app",
+                messagingSenderId: "344918432102",
+                appId: "1:344918432102:web:d764d62de4c28e89dc10a7",
+                measurementId: "G-YWKTE0ESHE",
+            };
+
+            const app = initializeApp(firebaseConfig);
+            const auth = getAuth(app);
+            const db = getFirestore(app);
+
+            let currentUser = null;
+            let currentServerId = null;
+            let unsubMessages = null;
+
+            // --- Authentication ---
+            window.handleAuth = (type) => {
+                const email = document.getElementById("email").value;
+                const pass = document.getElementById("password").value;
+                const authFunc =
+                    type === "register"
+                        ? createUserWithEmailAndPassword
+                        : signInWithEmailAndPassword;
+                authFunc(auth, email, pass).catch((err) => alert(err.message));
+            };
+
+            window.logout = () => signOut(auth);
+
+            onAuthStateChanged(auth, (user) => {
+                if (user) {
+                    currentUser = user;
+                    document.getElementById("auth-overlay").style.display =
+                        "none";
+                    loadUserServers();
+                } else {
+                    document.getElementById("auth-overlay").style.display =
+                        "flex";
+                }
+            });
+
+            // --- Server Management ---
+            window.createServer = async () => {
+                const name = prompt("Enter Server Name:");
+                if (!name) return;
+                const code = Math.random()
+                    .toString(36)
+                    .substring(2, 7)
+                    .toUpperCase();
+
+                const serverDoc = await addDoc(collection(db, "servers"), {
+                    name: name,
+                    inviteCode: code,
+                    owner: currentUser.uid,
+                });
+
+                await addDoc(collection(db, "members"), {
+                    serverId: serverDoc.id,
+                    userId: currentUser.uid,
+                    serverName: name,
+                });
+            };
+            window.deleteCurrentServer = async () => {
+                if (!currentServerId) return;
+                if (
+                    !confirm(
+                        "Are you sure you want to delete this server? All messages will be lost.",
+                    )
+                )
+                    return;
+
+                try {
+                    // 1. Delete the server document itself
+                    await deleteDoc(doc(db, "servers", currentServerId));
+
+                    // 2. Clean up members (optional but recommended)
+                    const memberQuery = query(
+                        collection(db, "members"),
+                        where("serverId", "==", currentServerId),
+                    );
+                    const memberSnap = await getDocs(memberQuery);
+                    memberSnap.forEach((d) =>
+                        deleteDoc(doc(db, "members", d.id)),
+                    );
+
+                    // 3. Clean up messages (optional but recommended)
+                    const messageQuery = query(
+                        collection(db, "messages"),
+                        where("serverId", "==", currentServerId),
+                    );
+                    const messageSnap = await getDocs(messageQuery);
+                    messageSnap.forEach((d) =>
+                        deleteDoc(doc(db, "messages", d.id)),
+                    );
+
+                    alert("Server deleted.");
+                    location.reload(); // Refresh to update the sidebar
+                } catch (err) {
+                    alert("Error deleting server: " + err.message);
+                }
+            };
+
+            window.joinServer = async () => {
+                const code = prompt("Enter Invite Code:");
+                if (!code) return;
+                const q = query(
+                    collection(db, "servers"),
+                    where("inviteCode", "==", code.toUpperCase()),
+                );
+                const snap = await getDocs(q);
+
+                if (!snap.empty) {
+                    const server = snap.docs[0];
+                    await addDoc(collection(db, "members"), {
+                        serverId: server.id,
+                        userId: currentUser.uid,
+                        serverName: server.data().name,
+                    });
+                } else {
+                    alert("Invalid Code");
+                }
+            };
+
+            function loadUserServers() {
+                const q = query(
+                    collection(db, "members"),
+                    where("userId", "==", currentUser.uid),
+                );
+                onSnapshot(q, (snap) => {
+                    const list = document.getElementById("server-list");
+                    list.innerHTML = "";
+                    snap.forEach((doc) => {
+                        const data = doc.data();
+                        const el = document.createElement("div");
+                        el.className = "server-icon";
+                        el.innerText = data.serverName[0].toUpperCase();
+                        el.onclick = () =>
+                            selectServer(data.serverId, data.serverName);
+                        list.appendChild(el);
+                    });
+                });
+            }
+
+            async function selectServer(id, name) {
+                currentServerId = id;
+                document.getElementById("current-server-name").innerText = name;
+                document.getElementById("msg-input").disabled = false;
+                document.getElementById("msg-input").placeholder =
+                    `Message ${name}`;
+
+                // Get invite code
+                try {
+                    const q_server = query(collection(db, "servers"));
+                    const snap_server = await getDocs(q_server);
+                    const serverInfo = snap_server.docs.find((d) => d.id === id);
+                    if (serverInfo) {
+                        document.getElementById("invite-display").innerText =
+                            `Invite Code: ${serverInfo.data().inviteCode}`;
+                        
+                        const serverData = serverInfo.data();
+                        const deleteBtn = document.getElementById("delete-btn");
+                        if (serverData.owner === currentUser.uid) {
+                            deleteBtn.style.display = "block";
+                        } else {
+                            deleteBtn.style.display = "none";
+                        }
+                    }
+                } catch (err) {
+                    console.error("Error fetching server info:", err);
+                }
+
+                loadMessages();
+            }
+
+            // --- Messaging ---
+            function loadMessages() {
+                if (unsubMessages) unsubMessages(); // Stop listening to old server
+                const q = query(
+                    collection(db, "messages"),
+                    where("serverId", "==", currentServerId),
+                    orderBy("createdAt", "asc"),
+                );
+
+                unsubMessages = onSnapshot(q, (snap) => {
+                    const list = document.getElementById("messages");
+                    list.innerHTML = "";
+                    snap.forEach((doc) => {
+                        const data = doc.data();
+                        const time =
+                            data.createdAt?.toDate().toLocaleTimeString([], {
+                                hour: "2-digit",
+                                minute: "2-digit",
+                            }) || "...";
+                        const li = document.createElement("li");
+                        li.innerHTML = `<span class="msg-user">${data.user.split("@")[0]}</span><span class="msg-time">${time}</span><br>${data.text}`;
+                        list.appendChild(li);
+                    });
+                    list.scrollTop = list.scrollHeight;
+                });
+            }
+
+            document.getElementById("input-area").onsubmit = async (e) => {
+                e.preventDefault();
+                const text = document.getElementById("msg-input").value;
+                if (!text || !currentServerId) return;
+
+                await addDoc(collection(db, "messages"), {
+                    text: text,
+                    user: currentUser.email,
+                    serverId: currentServerId,
+                    createdAt: serverTimestamp(),
+                });
+                document.getElementById("msg-input").value = "";
+            };
+        </script>
+    </body>
 </html>

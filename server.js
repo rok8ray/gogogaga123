@@ -18,7 +18,16 @@ if (fs.existsSync(DATA_FILE)) {
 }
 
 app.get("/", (req, res) => {
-  res.sendFile(__dirname + "/index.html");
+  let html = fs.readFileSync(__dirname + "/index.html", "utf8");
+  html = html.replace("{{FIREBASE_API_KEY}}", process.env.FIREBASE_API_KEY || "");
+  html = html.replace("{{FIREBASE_AUTH_DOMAIN}}", process.env.FIREBASE_AUTH_DOMAIN || "");
+  html = html.replace("{{FIREBASE_PROJECT_ID}}", process.env.FIREBASE_PROJECT_ID || "");
+  html = html.replace("{{FIREBASE_STORAGE_BUCKET}}", process.env.FIREBASE_STORAGE_BUCKET || "");
+  html = html.replace("{{FIREBASE_MESSAGING_SENDER_ID}}", process.env.FIREBASE_MESSAGING_SENDER_ID || "");
+  html = html.replace("{{FIREBASE_APP_ID}}", process.env.FIREBASE_APP_ID || "");
+  html = html.replace("{{FIREBASE_MEASUREMENT_ID}}", process.env.FIREBASE_MEASUREMENT_ID || "");
+  res.set("Content-Type", "text/html");
+  res.send(html);
 });
 
 io.on("connection", (socket) => {

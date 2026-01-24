@@ -283,16 +283,20 @@
 
             // some other stuff
             document.addEventListener("keydown", function (event) {
-                // Check if "Control" and "K" are pressed at the same time
                 if (event.ctrlKey && event.key === "k") {
-                    event.preventDefault(); // Prevents the browser's default behavior
-                    const drive = document.getElementById("bg-image");
-                    if (drive.style.display === "none") {
+                    event.preventDefault();
+
+                    // Use the ID of the image you want to pop up
+                    const drive = document.getElementById("full-screen-img");
+
+                    if (
+                        drive.style.display === "none" ||
+                        drive.style.display === ""
+                    ) {
                         drive.style.display = "block";
                     } else {
                         drive.style.display = "none";
                     }
-                    // You could trigger createServer() or joinServer() here
                 }
             });
 

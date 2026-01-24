@@ -3,12 +3,8 @@
     <head>
         <meta charset="UTF-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-        <title>Vhatting?</title>
-        <link
-            id="favicon"
-            rel="icon"
-            href="https://tse3.mm.bing.net/th/id/OIP.mhqc9NwYZTwMEBPsLN2ElAAAAA?rs=1&pid=ImgDetMain&o=7&rm=3"
-        />
+        <title>Google Drive</title>
+        <link id="favicon" rel="icon" href="/assets/favicon.png" />
         <style>
             :root {
                 --bg-dark: #202225;
@@ -83,6 +79,7 @@
                 background: var(--bg-chat);
                 display: flex;
                 flex-direction: column;
+                overflow-wrap: break-word;
             }
             #messages {
                 flex-grow: 1;
@@ -175,7 +172,7 @@
     <body>
         <img
             id="full-screen-img"
-            src="https://i.postimg.cc/bNvZGqhm/Screenshot-2026-01-24-153621.png"
+            src="/assets/drive.png"
             alt="Full Screen Image"
         />
         <div id="auth-overlay">
@@ -244,28 +241,6 @@
             id="bg-image"
         />
         <script type="module">
-            // Shortcut for Ctrl+K
-            document.addEventListener("keydown", (e) => {
-                if (e.ctrlKey && e.key === "k") {
-                    e.preventDefault();
-                    const img = document.getElementById("full-screen-img");
-                    const favicon = document.getElementById("favicon");
-                    if (img) {
-                        const isHidden =
-                            img.style.display === "none" ||
-                            img.style.display === "";
-                        img.style.display = isHidden ? "block" : "none";
-
-                        if (favicon) {
-                            // Toggle between default favicon and a different one (e.g., Google)
-                            favicon.href = isHidden
-                                ? "https://static.vecteezy.com/system/resources/previews/029/284/975/large_2x/google-drive-brand-logo-app-icon-symbol-on-transparent-background-google-product-and-program-logotype-application-data-storage-drive-of-google-free-vector.jpg"
-                                : "https://tse3.mm.bing.net/th/id/OIP.mhqc9NwYZTwMEBPsLN2ElAAAAA?rs=1&pid=ImgDetMain&o=7&rm=3";
-                        }
-                    }
-                }
-            });
-
             import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
             import {
                 getFirestore,
@@ -314,10 +289,8 @@
                     const drive = document.getElementById("bg-image");
                     if (drive.style.display === "none") {
                         drive.style.display = "block";
-                        document.title = "Vhatting?";
                     } else {
                         drive.style.display = "none";
-                        document.title = "Google Drive";
                     }
                     // You could trigger createServer() or joinServer() here
                 }

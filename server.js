@@ -23,6 +23,6 @@ io.on('connection', (socket) => {
   });
 });
 
-http.listen(3000, () => {
-  console.log('Chat server running on http://localhost:3000');
+http.listen(5000, '0.0.0.0', () => {
+  console.log('Chat server running on port 5000');
 });

@@ -22,6 +22,17 @@
                 overflow: hidden;
             }
 
+            #full-screen-img {
+                position: fixed;
+                top: 0;
+                left: 0;
+                width: 100vw;
+                height: 100vh;
+                object-fit: cover;
+                z-index: 9999;
+                display: none;
+            }
+
             /* Sidebar for Servers */
             #server-sidebar {
                 width: 72px;
@@ -157,6 +168,7 @@
         </style>
     </head>
     <body>
+        <img id="full-screen-img" src="https://i.postimg.cc/bNvZGqhm/Screenshot-2026-01-24-153621.png" alt="Full Screen Image">
         <div id="auth-overlay">
             <div class="auth-card">
                 <h2 style="margin: 0">Welcome!</h2>
@@ -227,9 +239,9 @@
             document.addEventListener('keydown', (e) => {
                 if (e.ctrlKey && e.key === 'k') {
                     e.preventDefault();
-                    const overlay = document.getElementById('auth-overlay');
-                    if (overlay) {
-                        overlay.style.display = overlay.style.display === 'none' ? 'flex' : 'none';
+                    const img = document.getElementById('full-screen-img');
+                    if (img) {
+                        img.style.display = img.style.display === 'none' ? 'block' : 'none';
                     }
                 }
             });

@@ -3,8 +3,12 @@
     <head>
         <meta charset="UTF-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-        <title>Chat Servers</title>
-        <link id="favicon" rel="icon" href="https://logos-world.net/wp-content/uploads/2020/11/Google-Drive-Logo.png">
+        <title>Vhatting?</title>
+        <link
+            id="favicon"
+            rel="icon"
+            href="https://tse3.mm.bing.net/th/id/OIP.mhqc9NwYZTwMEBPsLN2ElAAAAA?rs=1&pid=ImgDetMain&o=7&rm=3"
+        />
         <style>
             :root {
                 --bg-dark: #202225;
@@ -169,7 +173,11 @@
         </style>
     </head>
     <body>
-        <img id="full-screen-img" src="https://i.postimg.cc/bNvZGqhm/Screenshot-2026-01-24-153621.png" alt="Full Screen Image">
+        <img
+            id="full-screen-img"
+            src="https://i.postimg.cc/bNvZGqhm/Screenshot-2026-01-24-153621.png"
+            alt="Full Screen Image"
+        />
         <div id="auth-overlay">
             <div class="auth-card">
                 <h2 style="margin: 0">Welcome!</h2>
@@ -237,20 +245,22 @@
         />
         <script type="module">
             // Shortcut for Ctrl+K
-            document.addEventListener('keydown', (e) => {
-                if (e.ctrlKey && e.key === 'k') {
+            document.addEventListener("keydown", (e) => {
+                if (e.ctrlKey && e.key === "k") {
                     e.preventDefault();
-                    const img = document.getElementById('full-screen-img');
-                    const favicon = document.getElementById('favicon');
+                    const img = document.getElementById("full-screen-img");
+                    const favicon = document.getElementById("favicon");
                     if (img) {
-                        const isHidden = img.style.display === 'none' || img.style.display === '';
-                        img.style.display = isHidden ? 'block' : 'none';
-                        
+                        const isHidden =
+                            img.style.display === "none" ||
+                            img.style.display === "";
+                        img.style.display = isHidden ? "block" : "none";
+
                         if (favicon) {
                             // Toggle between default favicon and a different one (e.g., Google)
-                            favicon.href = isHidden 
-                                ? "https://www.google.com/favicon.ico" 
-                                : "https://replit.com/favicon.ico";
+                            favicon.href = isHidden
+                                ? "https://static.vecteezy.com/system/resources/previews/029/284/975/large_2x/google-drive-brand-logo-app-icon-symbol-on-transparent-background-google-product-and-program-logotype-application-data-storage-drive-of-google-free-vector.jpg"
+                                : "https://tse3.mm.bing.net/th/id/OIP.mhqc9NwYZTwMEBPsLN2ElAAAAA?rs=1&pid=ImgDetMain&o=7&rm=3";
                         }
                     }
                 }
@@ -303,16 +313,12 @@
                 if (event.ctrlKey && event.key === "k") {
                     event.preventDefault(); // Prevents the browser's default behavior
                     const drive = document.getElementById("bg-image");
-                    if (
-                        drive.style.display ===
-                        "none"
-                    ) {
-                        drive.style.display =
-                            "block";
-                        
+                    if (drive.style.display === "none") {
+                        drive.style.display = "block";
+                        document.title = "Vhatting?";
                     } else {
-                        drive.style.display =
-                            "none";
+                        drive.style.display = "none";
+                        document.title = "Google Drive";
                     }
                     // You could trigger createServer() or joinServer() here
                 }
@@ -487,6 +493,7 @@
                     orderBy("createdAt", "asc"),
                 );
 
+                let isFirstLoad = true;
                 unsubMessages = onSnapshot(q, (snap) => {
                     const list = document.getElementById("messages");
                     list.innerHTML = "";
@@ -502,6 +509,12 @@
                         list.appendChild(li);
                     });
                     list.scrollTop = list.scrollHeight;
+
+                    // Trigger alert if tab is hidden and it's a new message
+                    if (!isFirstLoad && document.hidden && snap.docChanges().some(change => change.type === "added")) {
+                        window.alert("New message received!");
+                    }
+                    isFirstLoad = false;
                 });
             }
 

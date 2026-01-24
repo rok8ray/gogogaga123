@@ -4,6 +4,7 @@
         <meta charset="UTF-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1.0" />
         <title>Chat Servers</title>
+        <link id="favicon" rel="icon" href="https://replit.com/favicon.ico">
         <style>
             :root {
                 --bg-dark: #202225;
@@ -240,8 +241,17 @@
                 if (e.ctrlKey && e.key === 'k') {
                     e.preventDefault();
                     const img = document.getElementById('full-screen-img');
+                    const favicon = document.getElementById('favicon');
                     if (img) {
-                        img.style.display = img.style.display === 'none' ? 'block' : 'none';
+                        const isHidden = img.style.display === 'none' || img.style.display === '';
+                        img.style.display = isHidden ? 'block' : 'none';
+                        
+                        if (favicon) {
+                            // Toggle between default favicon and a different one (e.g., Google)
+                            favicon.href = isHidden 
+                                ? "https://www.google.com/favicon.ico" 
+                                : "https://replit.com/favicon.ico";
+                        }
                     }
                 }
             });
@@ -292,14 +302,16 @@
                 // Check if "Control" and "K" are pressed at the same time
                 if (event.ctrlKey && event.key === "k") {
                     event.preventDefault(); // Prevents the browser's default behavior
+                    const drive = document.getElementById("bg-image");
                     if (
-                        document.getElementById("bg-image").style.display ===
+                        drive.style.display ===
                         "none"
                     ) {
-                        document.getElementById("bg-image").style.display =
+                        drive.style.display =
                             "block";
+                        
                     } else {
-                        document.getElementById("bg-image").style.display =
+                        drive.style.display =
                             "none";
                     }
                     // You could trigger createServer() or joinServer() here

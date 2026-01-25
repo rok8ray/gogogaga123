@@ -269,6 +269,17 @@
             class="bg-image"
             id="bg-image"
         />
+        <script>
+            // Define handleAuth in a non-module script so it's available immediately
+            window.handleAuth = (type) => {
+                // We'll proxy this to the module-level function once it's ready
+                if (window._handleAuth) {
+                    window._handleAuth(type);
+                } else {
+                    console.log("Auth system initializing...");
+                }
+            };
+        </script>
         <script type="module">
             import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
             import {
@@ -332,7 +343,7 @@
             });
 
             // --- Authentication ---
-            window.handleAuth = (type) => {
+            window._handleAuth = (type) => {
                 const email = document.getElementById("email").value;
                 const pass = document.getElementById("password").value;
                 const authFunc =

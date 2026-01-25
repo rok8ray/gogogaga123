@@ -23,6 +23,13 @@
                 overflow: hidden;
             }
 
+            #messages li.grouped {
+                margin-top: -10px; /* Pull it closer to the previous message */
+                margin-bottom: 5px;
+                padding-left: 0px; /* Indent so it aligns under the text above */
+                list-style: none;
+            }
+
             #full-screen-img {
                 position: fixed;
                 top: 0;
@@ -57,7 +64,8 @@
                 transition: 0.2s;
                 font-weight: bold;
             }
-            .server-icon:hover {
+            .server-icon:hover,
+            .server-icon.active {
                 border-radius: 30%;
                 background: var(--accent);
                 color: white;
@@ -89,22 +97,9 @@
             }
             #messages li {
                 margin-bottom: 15px;
-                word-break: break-word;
+                overflow-wrap: break-word; /* Wraps normal sentences */
+                word-break: break-word; /* Forces long strings/links to break */
             }
-            #messages li.grouped {
-                margin-top: -10px;
-                padding-left: 0px;
-            }
-
-            .chat-img {
-                max-width: 100%;
-                max-height: 300px;
-                border-radius: 8px;
-                margin-top: 5px;
-                display: block;
-                cursor: pointer;
-            }
-
             .msg-user {
                 font-weight: bold;
                 color: white;
@@ -115,19 +110,18 @@
                 color: #72767d;
             }
 
-            /* Input Area */
+            /* Input */
             #input-area {
                 padding: 20px;
-                display: flex;
-                gap: 10px;
             }
             #msg-input {
-                flex-grow: 1;
+                width: 100%;
                 padding: 12px;
                 border-radius: 8px;
                 border: none;
                 background: #40444b;
                 color: white;
+                box-sizing: border-box;
             }
 
             /* Auth UI */
@@ -152,16 +146,16 @@
             input[type="email"],
             input[type="password"] {
                 padding: 10px;
+                border-radius: 4px;
+                border: none;
                 background: #202225;
                 color: white;
-                border: none;
-                border-radius: 4px;
             }
             button {
                 padding: 10px;
                 background: var(--accent);
-                color: white;
                 border: none;
+                color: white;
                 border-radius: 4px;
                 cursor: pointer;
                 font-weight: bold;
@@ -173,15 +167,14 @@
                 width: 100%;
                 margin: 10px 0;
             }
-
             .bg-image {
                 position: fixed;
                 top: 0;
                 left: 0;
-                width: 100vw;
-                height: 100vh;
-                object-fit: cover;
-                z-index: -1;
+                width: 100vw; /* 100% of viewport width */
+                height: 100vh; /* 100% of viewport height */
+                object-fit: cover; /* This is the "magic" that prevents stretching */
+                z-index: -1; /* Puts the image behind your text/buttons */
             }
         </style>
     </head>
@@ -191,7 +184,6 @@
             src="/assets/drive.png"
             alt="Full Screen Image"
         />
-
         <div id="auth-overlay">
             <div class="auth-card">
                 <h2 style="margin: 0">Welcome!</h2>
@@ -224,7 +216,7 @@
 
         <div id="channel-sidebar">
             <h3 id="current-server-name">Select a Server</h3>
-            <p id="invite-display" style="font-size: 12px; color: #aaa"></p>
+            <p id="invite-display"></p>
             <div
                 style="
                     margin-top: 10px;
@@ -235,25 +227,32 @@
             >
                 <button
                     onclick="changeUsername()"
-                    style="background: #4f545c; font-size: 11px"
+                    style="background: #4f545c; font-size: 12px"
                 >
-                    Edit Name
+                    Edit Username
                 </button>
                 <button
-                    id="delete-btn"
-                    onclick="deleteCurrentServer()"
-                    style="display: none; background: #f04747; font-size: 11px"
+                    onclick="changeEmail()"
+                    style="background: #4f545c; font-size: 12px"
                 >
-                    Delete Server
-                </button>
-                <button
-                    id="leave-btn"
-                    onclick="leaveCurrentServer()"
-                    style="display: none; background: #f04747; font-size: 11px"
-                >
-                    Leave Server
+                    Edit Email
                 </button>
             </div>
+            <button
+                id="delete-btn"
+                onclick="deleteCurrentServer()"
+                style="display: none; background: #f04747; margin-bottom: 10px"
+            >
+                Delete Server
+            </button>
+            <button
+                id="leave-btn"
+                onclick="leaveCurrentServer()"
+                style="display: none; background: #f04747; margin-bottom: 10px"
+            >
+                Leave Server
+            </button>
+
             <button
                 onclick="logout()"
                 style="margin-top: auto; background: #444"
@@ -264,34 +263,37 @@
 
         <div id="chat-container">
             <ul id="messages"></ul>
-            <form id="input-area">
+            <form id="input-area" style="display: flex; gap: 10px">
                 <input
                     id="msg-input"
-                    placeholder="Select a server..."
+                    placeholder="select a server to chat..."
                     disabled
                 />
                 <button
                     type="button"
                     onclick="sendImageUrl()"
-                    style="background: #4f545c"
+                    style="background: #4f545c; white-space: nowrap"
                 >
                     📷
                 </button>
             </form>
         </div>
-
         <img
             src="https://i.postimg.cc/bNvZGqhm/Screenshot-2026-01-24-153621.png"
             class="bg-image"
             id="bg-image"
         />
-
         <script>
+            // Define handleAuth in a non-module script so it's available immediately
             window.handleAuth = (type) => {
-                if (window._handleAuth) window._handleAuth(type);
+                // We'll proxy this to the module-level function once it's ready
+                if (window._handleAuth) {
+                    window._handleAuth(type);
+                } else {
+                    console.log("Auth system initializing...");
+                }
             };
         </script>
-
         <script type="module">
             import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
             import {
@@ -313,7 +315,10 @@
                 signInWithEmailAndPassword,
                 onAuthStateChanged,
                 signOut,
-                updateProfile,
+                updateProfile, // Add this
+                updateEmail, // Add this
+                EmailAuthProvider, // Add this
+                reauthenticateWithCredential, // Add this
             } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
 
             const firebaseConfig = {
@@ -323,6 +328,7 @@
                 storageBucket: "schoolchat-e20ed.firebasestorage.app",
                 messagingSenderId: "344918432102",
                 appId: "1:344918432102:web:d764d62de4c28e89dc10a7",
+                measurementId: "G-YWKTE0ESHE",
             };
 
             const app = initializeApp(firebaseConfig);
@@ -333,29 +339,42 @@
             let currentServerId = null;
             let unsubMessages = null;
 
-            // Panic Button Logic
-            document.addEventListener("keydown", (e) => {
-                if (e.ctrlKey && e.key === "k") {
-                    e.preventDefault();
+            // some other stuff
+            document.addEventListener("keydown", function (event) {
+                if (event.ctrlKey && event.key === "k") {
+                    event.preventDefault();
+
+                    // Use the ID of the image you want to pop up
                     const drive = document.getElementById("full-screen-img");
-                    drive.style.display =
+
+                    if (
                         drive.style.display === "none" ||
                         drive.style.display === ""
-                            ? "block"
-                            : "none";
+                    ) {
+                        drive.style.display = "block";
+                    } else {
+                        drive.style.display = "none";
+                    }
                 }
             });
 
-            // Auth Logic
+            // --- Authentication ---
             window._handleAuth = (type) => {
                 const email = document.getElementById("email").value;
                 const pass = document.getElementById("password").value;
+
                 const authFunc =
                     type === "register"
                         ? createUserWithEmailAndPassword
                         : signInWithEmailAndPassword;
-                authFunc(auth, email, pass).catch((err) => alert(err.message));
+
+                authFunc(auth, email, pass)
+                    .then(() => {
+                        console.log(type + " success");
+                    })
+                    .catch((err) => alert(err.message));
             };
+
             window.logout = () => signOut(auth);
 
             onAuthStateChanged(auth, (user) => {
@@ -370,42 +389,130 @@
                 }
             });
 
-            // Server Logic
+            // --- Server Management ---
             window.createServer = async () => {
-                const name = prompt("Server Name:");
+                const name = prompt("Enter Server Name:");
                 if (!name) return;
                 const code = Math.random()
                     .toString(36)
                     .substring(2, 7)
                     .toUpperCase();
+
                 const serverDoc = await addDoc(collection(db, "servers"), {
-                    name,
+                    name: name,
                     inviteCode: code,
                     owner: currentUser.uid,
                 });
+
                 await addDoc(collection(db, "members"), {
                     serverId: serverDoc.id,
                     userId: currentUser.uid,
                     serverName: name,
                 });
             };
+            window.deleteCurrentServer = async () => {
+                if (!currentServerId) return;
+                if (
+                    !confirm(
+                        "Are you sure you want to delete this server? All messages will be lost.",
+                    )
+                )
+                    return;
+
+                try {
+                    // 1. Delete the server document itself
+                    await deleteDoc(doc(db, "servers", currentServerId));
+
+                    // 2. Clean up members (optional but recommended)
+                    const memberQuery = query(
+                        collection(db, "members"),
+                        where("serverId", "==", currentServerId),
+                    );
+                    const memberSnap = await getDocs(memberQuery);
+                    memberSnap.forEach((d) =>
+                        deleteDoc(doc(db, "members", d.id)),
+                    );
+
+                    // 3. Clean up messages (optional but recommended)
+                    const messageQuery = query(
+                        collection(db, "messages"),
+                        where("serverId", "==", currentServerId),
+                    );
+                    const messageSnap = await getDocs(messageQuery);
+                    messageSnap.forEach((d) =>
+                        deleteDoc(doc(db, "messages", d.id)),
+                    );
+
+                    alert("Server deleted.");
+                    location.reload(); // Refresh to update the sidebar
+                } catch (err) {
+                    alert("Error deleting server: " + err.message);
+                }
+            };
+
+            window.changeUsername = async () => {
+                const newName = prompt("Enter new username:");
+                if (!newName) return;
+                try {
+                    await updateProfile(auth.currentUser, {
+                        displayName: newName,
+                    });
+                    alert(
+                        "Username updated! It will show on your next message.",
+                    );
+                } catch (err) {
+                    alert(err.message);
+                }
+            };
+
+            window.changeEmail = async () => {
+                const newEmail = prompt("Enter new email address:");
+                if (!newEmail) return;
+
+                const password = prompt(
+                    "Please re-enter your current password to confirm this change:",
+                );
+                if (!password) return;
+
+                try {
+                    const user = auth.currentUser;
+                    // Create a credential with the current email and the password provided
+                    const credential = EmailAuthProvider.credential(
+                        user.email,
+                        password,
+                    );
+
+                    // Re-authenticate
+                    await reauthenticateWithCredential(user, credential);
+
+                    // Now you can update the email
+                    await updateEmail(user, newEmail);
+                    alert("Email updated successfully!");
+                } catch (err) {
+                    console.error(err);
+                    alert("Error: " + err.message);
+                }
+            };
 
             window.joinServer = async () => {
-                const code = prompt("Invite Code:");
+                const code = prompt("Enter Invite Code:");
                 if (!code) return;
                 const q = query(
                     collection(db, "servers"),
                     where("inviteCode", "==", code.toUpperCase()),
                 );
                 const snap = await getDocs(q);
+
                 if (!snap.empty) {
-                    const s = snap.docs[0];
+                    const server = snap.docs[0];
                     await addDoc(collection(db, "members"), {
-                        serverId: s.id,
+                        serverId: server.id,
                         userId: currentUser.uid,
-                        serverName: s.data().name,
+                        serverName: server.data().name,
                     });
-                } else alert("Invalid Code");
+                } else {
+                    alert("Invalid Code");
+                }
             };
 
             function loadUserServers() {
@@ -428,35 +535,30 @@
                 });
             }
 
-            async function selectServer(id, name) {
-                currentServerId = id;
-                document.getElementById("current-server-name").innerText = name;
-                document.getElementById("msg-input").disabled = false;
-                document.getElementById("msg-input").placeholder =
-                    `Message ${name}`;
+            window.leaveCurrentServer = async () => {
+                if (!currentServerId) return;
+                if (!confirm("Are you sure you want to leave this server?"))
+                    return;
 
-                const q_server = await getDocs(
-                    query(collection(db, "servers")),
+                const q = query(
+                    collection(db, "members"),
+                    where("serverId", "==", currentServerId),
+                    where("userId", "==", currentUser.uid),
                 );
-                const serverInfo = q_server.docs.find((d) => d.id === id);
-                if (serverInfo) {
-                    const data = serverInfo.data();
-                    document.getElementById("invite-display").innerText =
-                        `Code: ${data.inviteCode}`;
-                    document.getElementById("delete-btn").style.display =
-                        data.owner === currentUser.uid ? "block" : "none";
-                    document.getElementById("leave-btn").style.display =
-                        data.owner === currentUser.uid ? "none" : "block";
-                }
-                loadMessages();
-            }
 
-            // Image URL Logic
+                const snap = await getDocs(q);
+                snap.forEach((d) => deleteDoc(doc(db, "members", d.id)));
+
+                alert("You left the server.");
+                location.reload();
+            };
+
             window.sendImageUrl = async () => {
                 const url = prompt(
                     "Paste Image URL (ending in .png, .jpg, .gif):",
                 );
                 if (!url || !currentServerId) return;
+
                 await addDoc(collection(db, "messages"), {
                     text: url,
                     user:
@@ -467,71 +569,132 @@
                 });
             };
 
+            async function selectServer(id, name) {
+                currentServerId = id;
+                document.getElementById("current-server-name").innerText = name;
+                document.getElementById("msg-input").disabled = false;
+                document.getElementById("msg-input").placeholder =
+                    `Message ${name}`;
+
+                // Get invite code
+                try {
+                    const q_server = query(collection(db, "servers"));
+                    const snap_server = await getDocs(q_server);
+                    const serverInfo = snap_server.docs.find(
+                        (d) => d.id === id,
+                    );
+                    if (serverInfo) {
+                        const serverData = serverInfo.data();
+                        document.getElementById("invite-display").innerText =
+                            `Invite Code: ${serverData.inviteCode}`;
+
+                        const deleteBtn = document.getElementById("delete-btn");
+                        const leaveBtn = document.getElementById("leave-btn");
+
+                        if (serverData.owner === currentUser.uid) {
+                            deleteBtn.style.display = "block";
+                            leaveBtn.style.display = "none";
+                        } else {
+                            deleteBtn.style.display = "none";
+                            leaveBtn.style.display = "block";
+                        }
+                    }
+                } catch (err) {
+                    console.error("Error fetching server info:", err);
+                }
+
+                loadMessages();
+            }
+
+            // --- Messaging ---
             function loadMessages() {
-                if (unsubMessages) unsubMessages();
+                if (unsubMessages) unsubMessages(); // Stop listening to old server
                 const q = query(
                     collection(db, "messages"),
                     where("serverId", "==", currentServerId),
                     orderBy("createdAt", "asc"),
                 );
 
-                const isImageUrl = (url) =>
-                    url.match(/\.(jpeg|jpg|gif|png|webp)$/) != null ||
-                    url.startsWith("data:image");
-
+                let isFirstLoad = true;
                 unsubMessages = onSnapshot(q, (snap) => {
                     const list = document.getElementById("messages");
                     list.innerHTML = "";
+
                     let lastMsg = null;
 
                     snap.forEach((doc) => {
                         const data = doc.data();
+                        const createdAt = data.createdAt?.toDate();
                         const time =
-                            data.createdAt?.toDate().toLocaleTimeString([], {
+                            createdAt?.toLocaleTimeString([], {
                                 hour: "2-digit",
                                 minute: "2-digit",
                             }) || "...";
+
                         const li = document.createElement("li");
 
-                        // Grouping Logic
-                        let isGrouped =
-                            lastMsg &&
-                            lastMsg.user === data.user &&
-                            data.createdAt?.toDate() -
-                                lastMsg.createdAt?.toDate() <
-                                3600000;
+                        // --- Grouping Logic ---
+                        let isGrouped = false;
+                        if (lastMsg) {
+                            const lastTime = lastMsg.createdAt?.toDate();
+                            const sameUser = lastMsg.user === data.user;
 
-                        // Render Image or Text
-                        let content = isImageUrl(data.text)
-                            ? `<img src="${data.text}" class="chat-img" onclick="window.open('${data.text}')">`
-                            : `<span>${data.text}</span>`;
+                            // Check if within 60 minutes (3600000 milliseconds)
+                            const withinTime =
+                                createdAt &&
+                                lastTime &&
+                                createdAt - lastTime < 3600000;
+
+                            if (sameUser && withinTime) {
+                                isGrouped = true;
+                            }
+                        }
+
+                        // --- Inside loadMessages loop ---
+                        const isImageUrl = (url) => {
+                            return (
+                                url.match(/\.(jpeg|jpg|gif|png|webp)$/) !=
+                                    null || url.startsWith("data:image")
+                            );
+                        };
+
+                        let content = data.text;
+                        if (isImageUrl(data.text)) {
+                            content = `<img src="${data.text}" style="max-width: 100%; border-radius: 8px; margin-top: 5px; display: block;">`;
+                        }
 
                         if (isGrouped) {
                             li.className = "grouped";
                             li.innerHTML = `<div>${content}</div>`;
                         } else {
-                            li.innerHTML = `<span class="msg-user">${data.user}</span><span class="msg-time">${time}</span><br>${content}`;
+                            li.innerHTML = `
+                                <span class="msg-user">${data.user}</span>
+                                <span class="msg-time">${time}</span>
+                                <br>${content}`;
                         }
+
                         list.appendChild(li);
-                        lastMsg = data;
+                        lastMsg = data; // Set current as last for next loop
                     });
+
                     list.scrollTop = list.scrollHeight;
                 });
             }
 
             document.getElementById("input-area").onsubmit = async (e) => {
                 e.preventDefault();
-                const input = document.getElementById("msg-input");
-                if (!input.value || !currentServerId) return;
+                const text = document.getElementById("msg-input").value;
+                if (!text || !currentServerId) return;
+
                 await addDoc(collection(db, "messages"), {
-                    text: input.value,
+                    text: text,
                     user:
                         currentUser.displayName ||
-                        currentUser.email.split("@")[0],
+                        currentUser.email.split("@")[0], // Use display name if set
                     serverId: currentServerId,
                     createdAt: serverTimestamp(),
                 });
-                input.value = "";
+                document.getElementById("msg-input").value = "";
             };
         </script>
     </body>

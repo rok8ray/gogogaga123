@@ -26,7 +26,7 @@
             #messages li.grouped {
                 margin-top: -10px; /* Pull it closer to the previous message */
                 margin-bottom: 5px;
-                padding-left: 45px; /* Indent so it aligns under the text above */
+                padding-left: 0px; /* Indent so it aligns under the text above */
                 list-style: none;
             }
 
@@ -310,6 +310,8 @@
                 signOut,
                 updateProfile, // Add this
                 updateEmail, // Add this
+                EmailAuthProvider, // Add this
+                reauthenticateWithCredential, // Add this
             } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
 
             const firebaseConfig = {
@@ -459,13 +461,29 @@
             window.changeEmail = async () => {
                 const newEmail = prompt("Enter new email address:");
                 if (!newEmail) return;
+
+                const password = prompt(
+                    "Please re-enter your current password to confirm this change:",
+                );
+                if (!password) return;
+
                 try {
-                    await updateEmail(auth.currentUser, newEmail);
-                    alert("Email updated!");
-                } catch (err) {
-                    alert(
-                        "For security, you must have logged in recently to change your email.",
+                    const user = auth.currentUser;
+                    // Create a credential with the current email and the password provided
+                    const credential = EmailAuthProvider.credential(
+                        user.email,
+                        password,
                     );
+
+                    // Re-authenticate
+                    await reauthenticateWithCredential(user, credential);
+
+                    // Now you can update the email
+                    await updateEmail(user, newEmail);
+                    alert("Email updated successfully!");
+                } catch (err) {
+                    console.error(err);
+                    alert("Error: " + err.message);
                 }
             };
 

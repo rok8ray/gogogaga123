@@ -652,10 +652,10 @@
 
                         // --- Inside loadMessages loop ---
                         const isImageUrl = (url) => {
-                            return (
-                                url.match(/\.(jpeg|jpg|gif|png|webp)$/) !=
-                                    null || url.startsWith("data:image")
-                            );
+                            const isImageExtension =
+                                /\.(jpeg|jpg|gif|png|webp)/i.test(url);
+                            const isDataUri = url.startsWith("data:image");
+                            return isImageExtension || isDataUri;
                         };
 
                         let content = data.text;

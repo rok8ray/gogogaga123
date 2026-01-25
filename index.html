@@ -23,6 +23,13 @@
                 overflow: hidden;
             }
 
+            #messages li.grouped {
+                margin-top: -10px; /* Pull it closer to the previous message */
+                margin-bottom: 5px;
+                padding-left: 45px; /* Indent so it aligns under the text above */
+                list-style: none;
+            }
+
             #full-screen-img {
                 position: fixed;
                 top: 0;
@@ -571,31 +578,52 @@
                 unsubMessages = onSnapshot(q, (snap) => {
                     const list = document.getElementById("messages");
                     list.innerHTML = "";
+
+                    let lastMsg = null;
+
                     snap.forEach((doc) => {
                         const data = doc.data();
+                        const createdAt = data.createdAt?.toDate();
                         const time =
-                            data.createdAt?.toDate().toLocaleTimeString([], {
+                            createdAt?.toLocaleTimeString([], {
                                 hour: "2-digit",
                                 minute: "2-digit",
                             }) || "...";
-                        const li = document.createElement("li");
-                        // Remove the .split("@")[0] since we are now saving the preferred name directly
-                        li.innerHTML = `<span class="msg-user">${data.user}</span><span class="msg-time">${time}</span><br>${data.text}`;
-                        list.appendChild(li);
-                    });
-                    list.scrollTop = list.scrollHeight;
 
-                    // Trigger alert if tab is hidden and it's a new message
-                    if (
-                        !isFirstLoad &&
-                        document.hidden &&
-                        snap
-                            .docChanges()
-                            .some((change) => change.type === "added")
-                    ) {
-                        window.alert("New message received!");
-                    }
-                    isFirstLoad = false;
+                        const li = document.createElement("li");
+
+                        // --- Grouping Logic ---
+                        let isGrouped = false;
+                        if (lastMsg) {
+                            const lastTime = lastMsg.createdAt?.toDate();
+                            const sameUser = lastMsg.user === data.user;
+
+                            // Check if within 60 minutes (3600000 milliseconds)
+                            const withinTime =
+                                createdAt &&
+                                lastTime &&
+                                createdAt - lastTime < 3600000;
+
+                            if (sameUser && withinTime) {
+                                isGrouped = true;
+                            }
+                        }
+
+                        if (isGrouped) {
+                            li.className = "grouped";
+                            li.innerHTML = `<div>${data.text}</div>`;
+                        } else {
+                            li.innerHTML = `
+                                <span class="msg-user">${data.user}</span>
+                                <span class="msg-time">${time}</span>
+                                <br>${data.text}`;
+                        }
+
+                        list.appendChild(li);
+                        lastMsg = data; // Set current as last for next loop
+                    });
+
+                    list.scrollTop = list.scrollHeight;
                 });
             }
 

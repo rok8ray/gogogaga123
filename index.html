@@ -346,11 +346,17 @@
             window._handleAuth = (type) => {
                 const email = document.getElementById("email").value;
                 const pass = document.getElementById("password").value;
+
                 const authFunc =
                     type === "register"
                         ? createUserWithEmailAndPassword
                         : signInWithEmailAndPassword;
-                authFunc(auth, email, pass).catch((err) => alert(err.message));
+
+                authFunc(auth, email, pass)
+                    .then(() => {
+                        console.log(type + " success");
+                    })
+                    .catch((err) => alert(err.message));
             };
 
             window.logout = () => signOut(auth);
@@ -536,7 +542,7 @@
 
                         const deleteBtn = document.getElementById("delete-btn");
                         const leaveBtn = document.getElementById("leave-btn");
-                        
+
                         if (serverData.owner === currentUser.uid) {
                             deleteBtn.style.display = "block";
                             leaveBtn.style.display = "none";

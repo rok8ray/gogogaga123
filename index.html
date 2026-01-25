@@ -519,29 +519,23 @@
                         (d) => d.id === id,
                     );
                     if (serverInfo) {
-                        document.getElementById("invite-display").innerText =
-                            `Invite Code: ${serverInfo.data().inviteCode}`;
-
                         const serverData = serverInfo.data();
+                        document.getElementById("invite-display").innerText =
+                            `Invite Code: ${serverData.inviteCode}`;
+
                         const deleteBtn = document.getElementById("delete-btn");
+                        const leaveBtn = document.getElementById("leave-btn");
+                        
                         if (serverData.owner === currentUser.uid) {
                             deleteBtn.style.display = "block";
+                            leaveBtn.style.display = "none";
                         } else {
                             deleteBtn.style.display = "none";
+                            leaveBtn.style.display = "block";
                         }
                     }
                 } catch (err) {
                     console.error("Error fetching server info:", err);
-                }
-
-                // Inside selectServer function
-                const leaveBtn = document.getElementById("leave-btn");
-                if (serverData.owner === currentUser.uid) {
-                    deleteBtn.style.display = "block";
-                    leaveBtn.style.display = "none";
-                } else {
-                    deleteBtn.style.display = "none";
-                    leaveBtn.style.display = "block";
                 }
 
                 loadMessages();

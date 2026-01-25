@@ -90,7 +90,8 @@
             }
             #messages li {
                 margin-bottom: 15px;
-                overflow-wrap: break-word;
+                overflow-wrap: break-word; /* Wraps normal sentences */
+                word-break: break-word; /* Forces long strings/links to break */
             }
             .msg-user {
                 font-weight: bold;
@@ -209,13 +210,40 @@
         <div id="channel-sidebar">
             <h3 id="current-server-name">Select a Server</h3>
             <p id="invite-display"></p>
-
+            <div
+                style="
+                    margin-top: 10px;
+                    display: flex;
+                    flex-direction: column;
+                    gap: 5px;
+                "
+            >
+                <button
+                    onclick="changeUsername()"
+                    style="background: #4f545c; font-size: 12px"
+                >
+                    Edit Username
+                </button>
+                <button
+                    onclick="changeEmail()"
+                    style="background: #4f545c; font-size: 12px"
+                >
+                    Edit Email
+                </button>
+            </div>
             <button
                 id="delete-btn"
                 onclick="deleteCurrentServer()"
                 style="display: none; background: #f04747; margin-bottom: 10px"
             >
                 Delete Server
+            </button>
+            <button
+                id="leave-btn"
+                onclick="leaveCurrentServer()"
+                style="display: none; background: #f04747; margin-bottom: 10px"
+            >
+                Leave Server
             </button>
 
             <button
@@ -255,6 +283,8 @@
                 getDocs,
                 deleteDoc,
                 doc,
+                updateProfile, // Add this
+                updateEmail, // Add this
             } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
             import {
                 getAuth,
@@ -387,6 +417,34 @@
                 }
             };
 
+            window.changeUsername = async () => {
+                const newName = prompt("Enter new username:");
+                if (!newName) return;
+                try {
+                    await updateProfile(auth.currentUser, {
+                        displayName: newName,
+                    });
+                    alert(
+                        "Username updated! It will show on your next message.",
+                    );
+                } catch (err) {
+                    alert(err.message);
+                }
+            };
+
+            window.changeEmail = async () => {
+                const newEmail = prompt("Enter new email address:");
+                if (!newEmail) return;
+                try {
+                    await updateEmail(auth.currentUser, newEmail);
+                    alert("Email updated!");
+                } catch (err) {
+                    alert(
+                        "For security, you must have logged in recently to change your email.",
+                    );
+                }
+            };
+
             window.joinServer = async () => {
                 const code = prompt("Enter Invite Code:");
                 if (!code) return;
@@ -428,6 +486,24 @@
                 });
             }
 
+            window.leaveCurrentServer = async () => {
+                if (!currentServerId) return;
+                if (!confirm("Are you sure you want to leave this server?"))
+                    return;
+
+                const q = query(
+                    collection(db, "members"),
+                    where("serverId", "==", currentServerId),
+                    where("userId", "==", currentUser.uid),
+                );
+
+                const snap = await getDocs(q);
+                snap.forEach((d) => deleteDoc(doc(db, "members", d.id)));
+
+                alert("You left the server.");
+                location.reload();
+            };
+
             async function selectServer(id, name) {
                 currentServerId = id;
                 document.getElementById("current-server-name").innerText = name;
@@ -458,6 +534,16 @@
                     console.error("Error fetching server info:", err);
                 }
 
+                // Inside selectServer function
+                const leaveBtn = document.getElementById("leave-btn");
+                if (serverData.owner === currentUser.uid) {
+                    deleteBtn.style.display = "block";
+                    leaveBtn.style.display = "none";
+                } else {
+                    deleteBtn.style.display = "none";
+                    leaveBtn.style.display = "block";
+                }
+
                 loadMessages();
             }
 
@@ -482,7 +568,8 @@
                                 minute: "2-digit",
                             }) || "...";
                         const li = document.createElement("li");
-                        li.innerHTML = `<span class="msg-user">${data.user.split("@")[0]}</span><span class="msg-time">${time}</span><br>${data.text}`;
+                        // Remove the .split("@")[0] since we are now saving the preferred name directly
+                        li.innerHTML = `<span class="msg-user">${data.user}</span><span class="msg-time">${time}</span><br>${data.text}`;
                         list.appendChild(li);
                     });
                     list.scrollTop = list.scrollHeight;
@@ -508,7 +595,9 @@
 
                 await addDoc(collection(db, "messages"), {
                     text: text,
-                    user: currentUser.email,
+                    user:
+                        currentUser.displayName ||
+                        currentUser.email.split("@")[0], // Use display name if set
                     serverId: currentServerId,
                     createdAt: serverTimestamp(),
                 });

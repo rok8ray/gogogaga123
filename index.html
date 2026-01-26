@@ -364,9 +364,6 @@
                 serverTimestamp as rtdbTimestamp,
             } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
 
-            // Initialize RTDB
-            const rtdb = getDatabase(app);
-
             const firebaseConfig = {
                 apiKey: "AIzaSyCRB2celD-ShWGOIXm2fpYLQXz36IB5vfE",
                 authDomain: "schoolchat-e20ed.firebaseapp.com",
@@ -380,6 +377,7 @@
             const app = initializeApp(firebaseConfig);
             const auth = getAuth(app);
             const db = getFirestore(app);
+            const rtdb = getDatabase(app);
 
             let currentUser = null;
             let currentServerId = null;

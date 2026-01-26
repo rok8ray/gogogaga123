@@ -44,6 +44,7 @@
             /* Sidebar for Servers */
             #server-sidebar {
                 width: 72px;
+                min-width: 72px; /* Prevent shrinking */
                 background: var(--bg-dark);
                 display: flex;
                 flex-direction: column;
@@ -83,6 +84,7 @@
             /* Chat Area */
             #chat-container {
                 flex-grow: 1;
+                min-width: 0; /* MAGIC FIX: allows flex child to be smaller than its content */
                 background: var(--bg-chat);
                 display: flex;
                 flex-direction: column;

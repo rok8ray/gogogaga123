@@ -657,32 +657,74 @@
                 document.getElementById("msg-input").value = "";
             };
 
+            async function resizeImage(file, maxWidth = 800, quality = 0.7) {
+                return new Promise((resolve) => {
+                    const reader = new FileReader();
+                    reader.readAsDataURL(file);
+                    reader.onload = (event) => {
+                        const img = new Image();
+                        img.src = event.target.result;
+                        img.onload = () => {
+                            const canvas = document.createElement("canvas");
+                            let width = img.width;
+                            let height = img.height;
+
+                            // Calculate new dimensions
+                            if (width > maxWidth) {
+                                height = (maxWidth / width) * height;
+                                width = maxWidth;
+                            }
+
+                            canvas.width = width;
+                            canvas.height = height;
+                            const ctx = canvas.getContext("2d");
+                            ctx.drawImage(img, 0, 0, width, height);
+
+                            // Convert back to base64 (jpeg is smaller than png)
+                            const dataUrl = canvas.toDataURL(
+                                "image/jpeg",
+                                quality,
+                            );
+                            resolve(dataUrl);
+                        };
+                    };
+                });
+            }
+
             // Logic for clicking the camera and uploading local files
-            document.getElementById("file-chooser").onchange = function (e) {
-                const file = e.target.files[0];
-                if (!file || !currentServerId) return;
+            async function resizeImage(file, maxWidth = 800, quality = 0.7) {
+                return new Promise((resolve) => {
+                    const reader = new FileReader();
+                    reader.readAsDataURL(file);
+                    reader.onload = (event) => {
+                        const img = new Image();
+                        img.src = event.target.result;
+                        img.onload = () => {
+                            const canvas = document.createElement("canvas");
+                            let width = img.width;
+                            let height = img.height;
 
-                // Keep file under 1MB for Firestore limits
-                if (file.size > 1048487) {
-                    alert("Image too big! Pick one under 1MB.");
-                    return;
-                }
+                            // Calculate new dimensions
+                            if (width > maxWidth) {
+                                height = (maxWidth / width) * height;
+                                width = maxWidth;
+                            }
 
-                const reader = new FileReader();
-                reader.onloadend = async () => {
-                    const base64Data = reader.result;
-                    await addDoc(collection(db, "messages"), {
-                        text: base64Data,
-                        user:
-                            currentUser.displayName ||
-                            currentUser.email.split("@")[0],
-                        serverId: currentServerId,
-                        createdAt: serverTimestamp(),
-                    });
-                    e.target.value = ""; // Clear input
-                };
-                reader.readAsDataURL(file);
-            };
+                            canvas.width = width;
+                            canvas.height = height;
+                            const ctx = canvas.getContext("2d");
+                            ctx.drawImage(img, 0, 0, width, height);
+
+                            // Convert back to base64 (jpeg is smaller than png)
+                            const dataUrl = canvas.toDataURL(
+                                "image/jpeg",
+                                quality,
+                            );
+                            resolve(dataUrl);
+                        };
+                    };
+                });
+            }
 
             window.changeUsername = async () => {
                 const n = prompt("New Username:");

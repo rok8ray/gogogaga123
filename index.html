@@ -24,9 +24,9 @@
             }
 
             #messages li.grouped {
-                margin-top: -10px; /* Pull it closer to the previous message */
+                margin-top: -10px;
                 margin-bottom: 15px;
-                padding-left: 0px; /* Indent so it aligns under the text above */
+                padding-left: 0px;
                 list-style: none;
             }
 
@@ -41,10 +41,9 @@
                 display: none;
             }
 
-            /* Sidebar for Servers */
             #server-sidebar {
                 width: 72px;
-                min-width: 72px; /* Prevent shrinking */
+                min-width: 72px;
                 background: var(--bg-dark);
                 display: flex;
                 flex-direction: column;
@@ -72,7 +71,6 @@
                 color: white;
             }
 
-            /* Channel Sidebar */
             #channel-sidebar {
                 width: 240px;
                 background: var(--bg-sidebar);
@@ -81,10 +79,9 @@
                 flex-direction: column;
             }
 
-            /* Chat Area */
             #chat-container {
                 flex-grow: 1;
-                min-width: 0; /* MAGIC FIX: allows flex child to be smaller than its content */
+                min-width: 0;
                 background: var(--bg-chat);
                 display: flex;
                 flex-direction: column;
@@ -99,8 +96,8 @@
             }
             #messages li {
                 margin-bottom: 15px;
-                overflow-wrap: break-word; /* Wraps normal sentences */
-                word-break: break-word; /* Forces long strings/links to break */
+                overflow-wrap: break-word;
+                word-break: break-word;
             }
             .msg-user {
                 font-weight: bold;
@@ -112,7 +109,6 @@
                 color: #72767d;
             }
 
-            /* Input */
             #input-area {
                 padding: 20px;
             }
@@ -126,7 +122,6 @@
                 box-sizing: border-box;
             }
 
-            /* Auth UI */
             #auth-overlay {
                 position: fixed;
                 inset: 0;
@@ -173,10 +168,10 @@
                 position: fixed;
                 top: 0;
                 left: 0;
-                width: 100vw; /* 100% of viewport width */
-                height: 100vh; /* 100% of viewport height */
-                object-fit: cover; /* This is the "magic" that prevents stretching */
-                z-index: -1; /* Puts the image behind your text/buttons */
+                width: 100vw;
+                height: 100vh;
+                object-fit: cover;
+                z-index: -1;
             }
             .member-item {
                 display: flex;
@@ -191,10 +186,10 @@
             }
             .online {
                 background: #3ba55d;
-            } /* Green */
+            }
             .offline {
                 background: #747f8d;
-            } /* Gray */
+            }
         </style>
     </head>
     <body>
@@ -318,9 +313,7 @@
             id="bg-image"
         />
         <script>
-            // Define handleAuth in a non-module script so it's available immediately
             window.handleAuth = (type) => {
-                // We'll proxy this to the module-level function once it's ready
                 if (window._handleAuth) {
                     window._handleAuth(type);
                 } else {
@@ -349,12 +342,11 @@
                 signInWithEmailAndPassword,
                 onAuthStateChanged,
                 signOut,
-                updateProfile, // Add this
-                updateEmail, // Add this
-                EmailAuthProvider, // Add this
-                reauthenticateWithCredential, // Add this
+                updateProfile,
+                updateEmail,
+                EmailAuthProvider,
+                reauthenticateWithCredential,
             } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
-            // Add these to your existing imports
             import {
                 getDatabase,
                 ref,
@@ -383,14 +375,10 @@
             let currentServerId = null;
             let unsubMessages = null;
 
-            // some other stuff
             document.addEventListener("keydown", function (event) {
                 if (event.ctrlKey && event.key === "k") {
                     event.preventDefault();
-
-                    // Use the ID of the image you want to pop up
                     const drive = document.getElementById("full-screen-img");
-
                     if (
                         drive.style.display === "none" ||
                         drive.style.display === ""
@@ -402,20 +390,15 @@
                 }
             });
 
-            // --- Authentication ---
             window._handleAuth = (type) => {
                 const email = document.getElementById("email").value;
                 const pass = document.getElementById("password").value;
-
                 const authFunc =
                     type === "register"
                         ? createUserWithEmailAndPassword
                         : signInWithEmailAndPassword;
-
                 authFunc(auth, email, pass)
-                    .then(() => {
-                        console.log(type + " success");
-                    })
+                    .then(() => console.log(type + " success"))
                     .catch((err) => alert(err.message));
             };
 
@@ -427,35 +410,31 @@
                     document.getElementById("auth-overlay").style.display =
                         "none";
 
-                    // --- STEP 2: PRESENCE LOGIC ---
-                    // References to this user's status in the Realtime Database
+                    // --- REFINED PRESENCE LOGIC ---
                     const userStatusRef = ref(rtdb, "/status/" + user.uid);
+                    const getBestName = () =>
+                        user.displayName || user.email.split("@")[0];
 
                     const isOfflineForRTDB = {
                         state: "offline",
                         last_changed: rtdbTimestamp(),
-                        userName: user.displayName || user.email.split("@")[0],
+                        userName: getBestName(),
                     };
 
                     const isOnlineForRTDB = {
                         state: "online",
                         last_changed: rtdbTimestamp(),
-                        userName: user.displayName || user.email.split("@")[0],
+                        userName: getBestName(),
                     };
 
-                    // Check connection state
                     onValue(ref(rtdb, ".info/connected"), (snapshot) => {
                         if (snapshot.val() === false) return;
-
-                        // When I close the tab, automatically set me to offline
                         onDisconnect(userStatusRef)
                             .set(isOfflineForRTDB)
                             .then(() => {
-                                // While I am here, set me to online
                                 set(userStatusRef, isOnlineForRTDB);
                             });
                     });
-                    // ------------------------------
 
                     loadUserServers();
                 } else {
@@ -464,7 +443,6 @@
                 }
             });
 
-            // --- Server Management ---
             window.createServer = async () => {
                 const name = prompt("Enter Server Name:");
                 if (!name) return;
@@ -472,22 +450,21 @@
                     .toString(36)
                     .substring(2, 7)
                     .toUpperCase();
-
                 const serverDoc = await addDoc(collection(db, "servers"), {
                     name: name,
                     inviteCode: code,
                     owner: currentUser.uid,
                 });
-
                 await addDoc(collection(db, "members"), {
                     serverId: serverDoc.id,
                     userId: currentUser.uid,
                     serverName: name,
                     userName:
                         currentUser.displayName ||
-                        currentUser.email.split("@")[0], // Add this line
+                        currentUser.email.split("@")[0],
                 });
             };
+
             window.deleteCurrentServer = async () => {
                 if (!currentServerId) return;
                 if (
@@ -496,12 +473,8 @@
                     )
                 )
                     return;
-
                 try {
-                    // 1. Delete the server document itself
                     await deleteDoc(doc(db, "servers", currentServerId));
-
-                    // 2. Clean up members (optional but recommended)
                     const memberQuery = query(
                         collection(db, "members"),
                         where("serverId", "==", currentServerId),
@@ -510,8 +483,6 @@
                     memberSnap.forEach((d) =>
                         deleteDoc(doc(db, "members", d.id)),
                     );
-
-                    // 3. Clean up messages (optional but recommended)
                     const messageQuery = query(
                         collection(db, "messages"),
                         where("serverId", "==", currentServerId),
@@ -520,9 +491,8 @@
                     messageSnap.forEach((d) =>
                         deleteDoc(doc(db, "messages", d.id)),
                     );
-
                     alert("Server deleted.");
-                    location.reload(); // Refresh to update the sidebar
+                    location.reload();
                 } catch (err) {
                     alert("Error deleting server: " + err.message);
                 }
@@ -535,8 +505,18 @@
                     await updateProfile(auth.currentUser, {
                         displayName: newName,
                     });
+                    // Force refresh status in RTDB immediately
+                    const userStatusRef = ref(
+                        rtdb,
+                        "/status/" + auth.currentUser.uid,
+                    );
+                    await set(userStatusRef, {
+                        state: "online",
+                        last_changed: rtdbTimestamp(),
+                        userName: newName,
+                    });
                     alert(
-                        "Username updated! It will show on your next message.",
+                        "Username updated! It will show live on the member list.",
                     );
                 } catch (err) {
                     alert(err.message);
@@ -546,28 +526,20 @@
             window.changeEmail = async () => {
                 const newEmail = prompt("Enter new email address:");
                 if (!newEmail) return;
-
                 const password = prompt(
                     "Please re-enter your current password to confirm this change:",
                 );
                 if (!password) return;
-
                 try {
                     const user = auth.currentUser;
-                    // Create a credential with the current email and the password provided
                     const credential = EmailAuthProvider.credential(
                         user.email,
                         password,
                     );
-
-                    // Re-authenticate
                     await reauthenticateWithCredential(user, credential);
-
-                    // Now you can update the email
                     await updateEmail(user, newEmail);
                     alert("Email updated successfully!");
                 } catch (err) {
-                    console.error(err);
                     alert("Error: " + err.message);
                 }
             };
@@ -580,15 +552,12 @@
                     where("inviteCode", "==", code.toUpperCase()),
                 );
                 const snap = await getDocs(q);
-
                 if (!snap.empty) {
                     const server = snap.docs[0];
-                    // Inside window.joinServer...
                     await addDoc(collection(db, "members"), {
                         serverId: server.id,
                         userId: currentUser.uid,
                         serverName: server.data().name,
-                        // ADD THIS LINE BELOW
                         userName:
                             currentUser.displayName ||
                             currentUser.email.split("@")[0],
@@ -622,16 +591,13 @@
                 if (!currentServerId) return;
                 if (!confirm("Are you sure you want to leave this server?"))
                     return;
-
                 const q = query(
                     collection(db, "members"),
                     where("serverId", "==", currentServerId),
                     where("userId", "==", currentUser.uid),
                 );
-
                 const snap = await getDocs(q);
                 snap.forEach((d) => deleteDoc(doc(db, "members", d.id)));
-
                 alert("You left the server.");
                 location.reload();
             };
@@ -641,7 +607,6 @@
                     "Paste Image URL (ending in .png, .jpg, .gif):",
                 );
                 if (!url || !currentServerId) return;
-
                 await addDoc(collection(db, "messages"), {
                     text: url,
                     user:
@@ -659,7 +624,6 @@
                 document.getElementById("msg-input").placeholder =
                     `Message ${name}`;
 
-                // 1. Handle Server Settings (Invite Code, Delete/Leave buttons)
                 const q_server = await getDocs(
                     query(collection(db, "servers")),
                 );
@@ -674,25 +638,17 @@
                         data.owner === currentUser.uid ? "none" : "block";
                 }
 
-                // 2. STEP 5: LOAD LIVE MEMBER LIST
+                // --- UPDATED LIVE MEMBER LIST WITH LIVE RTDB NAMES ---
                 const memberQuery = query(
                     collection(db, "members"),
                     where("serverId", "==", id),
                 );
-                // --- Updated LOAD LIVE MEMBER LIST ---
-                // --- Updated LOAD LIVE MEMBER LIST section ---
                 onSnapshot(memberQuery, (snap) => {
                     const memberList = document.getElementById("member-list");
                     memberList.innerHTML = "";
-
                     snap.forEach((memberDoc) => {
                         const memberData = memberDoc.data();
                         const memberId = memberData.userId;
-
-                        // IMPROVED FALLBACK:
-                        // 1. Check for userName in the member document
-                        // 2. If missing, use the current user's email prefix as a guess (only works for 'you')
-                        // 3. Otherwise, use the short ID as a last resort
                         const defaultName =
                             memberData.userName ||
                             "User " + memberId.substring(0, 4);
@@ -714,12 +670,9 @@
                             const nameSpan = document.getElementById(
                                 `name-${memberId}`,
                             );
-
                             if (dot && nameSpan) {
                                 if (val) {
                                     dot.className = `status-dot ${val.state}`;
-                                    // This ensures that as soon as they are online,
-                                    // their REAL username from their session is pulled in
                                     if (val.userName)
                                         nameSpan.innerText = val.userName;
                                 } else {
@@ -733,22 +686,17 @@
                 loadMessages();
             }
 
-            // --- Messaging ---
             function loadMessages() {
-                if (unsubMessages) unsubMessages(); // Stop listening to old server
+                if (unsubMessages) unsubMessages();
                 const q = query(
                     collection(db, "messages"),
                     where("serverId", "==", currentServerId),
                     orderBy("createdAt", "asc"),
                 );
-
-                let isFirstLoad = true;
                 unsubMessages = onSnapshot(q, (snap) => {
                     const list = document.getElementById("messages");
                     list.innerHTML = "";
-
                     let lastMsg = null;
-
                     snap.forEach((doc) => {
                         const data = doc.data();
                         const createdAt = data.createdAt?.toDate();
@@ -757,34 +705,21 @@
                                 hour: "2-digit",
                                 minute: "2-digit",
                             }) || "...";
-
                         const li = document.createElement("li");
-
-                        // --- Grouping Logic ---
                         let isGrouped = false;
                         if (lastMsg) {
                             const lastTime = lastMsg.createdAt?.toDate();
                             const sameUser = lastMsg.user === data.user;
-
-                            // Check if within 60 minutes (3600000 milliseconds)
                             const withinTime =
                                 createdAt &&
                                 lastTime &&
                                 createdAt - lastTime < 3600000;
-
-                            if (sameUser && withinTime) {
-                                isGrouped = true;
-                            }
+                            if (sameUser && withinTime) isGrouped = true;
                         }
 
-                        // --- Inside loadMessages loop ---
-                        const isImageUrl = (url) => {
-                            const isImageExtension =
-                                /\.(jpeg|jpg|gif|png|webp)/i.test(url);
-                            const isDataUri = url.startsWith("data:image");
-                            return isImageExtension || isDataUri;
-                        };
-
+                        const isImageUrl = (url) =>
+                            /\.(jpeg|jpg|gif|png|webp)/i.test(url) ||
+                            url.startsWith("data:image");
                         let content = data.text;
                         if (isImageUrl(data.text)) {
                             content = `<img src="${data.text}" style="max-width: 100%; border-radius: 8px; margin-top: 5px; display: block;">`;
@@ -794,16 +729,11 @@
                             li.className = "grouped";
                             li.innerHTML = `<div>${content}</div>`;
                         } else {
-                            li.innerHTML = `
-                                <span class="msg-user">${data.user}</span>
-                                <span class="msg-time">${time}</span>
-                                <br>${content}`;
+                            li.innerHTML = `<span class="msg-user">${data.user}</span><span class="msg-time">${time}</span><br>${content}`;
                         }
-
                         list.appendChild(li);
-                        lastMsg = data; // Set current as last for next loop
+                        lastMsg = data;
                     });
-
                     list.scrollTop = list.scrollHeight;
                 });
             }
@@ -812,12 +742,11 @@
                 e.preventDefault();
                 const text = document.getElementById("msg-input").value;
                 if (!text || !currentServerId) return;
-
                 await addDoc(collection(db, "messages"), {
                     text: text,
                     user:
                         currentUser.displayName ||
-                        currentUser.email.split("@")[0], // Use display name if set
+                        currentUser.email.split("@")[0],
                     serverId: currentServerId,
                     createdAt: serverTimestamp(),
                 });

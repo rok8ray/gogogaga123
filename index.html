@@ -315,9 +315,15 @@
                     placeholder="select a server to chat..."
                     disabled
                 />
+                <input
+                    type="file"
+                    id="file-chooser"
+                    style="display: none"
+                    accept="image/*"
+                />
                 <button
                     type="button"
-                    onclick="sendImageUrl()"
+                    onclick="document.getElementById('file-chooser').click()"
                     style="background: #4f545c; white-space: nowrap"
                 >
                     📷
@@ -566,7 +572,6 @@
                         `;
                         memberList.appendChild(item);
 
-                        // Sync with RTDB for real-time name/status
                         onValue(ref(rtdb, "/status/" + uid), (statusSnap) => {
                             const val = statusSnap.val();
                             const dot = document.getElementById(`dot-${uid}`);
@@ -618,8 +623,9 @@
                         const isImg = (url) =>
                             /\.(jpeg|jpg|gif|png|webp)/i.test(url) ||
                             url.startsWith("data:image");
+
                         let content = isImg(data.text)
-                            ? `<img src="${data.text}" style="max-width: 100%; border-radius: 8px; margin-top: 5px; display: block;">`
+                            ? `<img src="${data.text}" style="max-width: 100%; max-height: 400px; border-radius: 8px; margin-top: 5px; display: block;">`
                             : data.text;
 
                         if (isGrouped) {
@@ -635,6 +641,7 @@
                 });
             }
 
+            // Logic for regular text messages and URL images
             document.getElementById("input-area").onsubmit = async (e) => {
                 e.preventDefault();
                 const text = document.getElementById("msg-input").value;
@@ -648,6 +655,33 @@
                     createdAt: serverTimestamp(),
                 });
                 document.getElementById("msg-input").value = "";
+            };
+
+            // Logic for clicking the camera and uploading local files
+            document.getElementById("file-chooser").onchange = function (e) {
+                const file = e.target.files[0];
+                if (!file || !currentServerId) return;
+
+                // Keep file under 1MB for Firestore limits
+                if (file.size > 1048487) {
+                    alert("Image too big! Pick one under 1MB.");
+                    return;
+                }
+
+                const reader = new FileReader();
+                reader.onloadend = async () => {
+                    const base64Data = reader.result;
+                    await addDoc(collection(db, "messages"), {
+                        text: base64Data,
+                        user:
+                            currentUser.displayName ||
+                            currentUser.email.split("@")[0],
+                        serverId: currentServerId,
+                        createdAt: serverTimestamp(),
+                    });
+                    e.target.value = ""; // Clear input
+                };
+                reader.readAsDataURL(file);
             };
 
             window.changeUsername = async () => {

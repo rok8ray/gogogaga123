@@ -12,6 +12,7 @@
                 --bg-chat: #36393f;
                 --text-main: #dcddde;
                 --accent: #5865f2;
+                --danger: #ed4245;
             }
             body {
                 margin: 0;
@@ -23,13 +24,7 @@
                 overflow: hidden;
             }
 
-            #messages li.grouped {
-                margin-top: -10px;
-                margin-bottom: 15px;
-                padding-left: 0px;
-                list-style: none;
-            }
-
+            /* Server List (Far Left) */
             #server-sidebar {
                 width: 72px;
                 min-width: 72px;
@@ -52,6 +47,8 @@
                 cursor: pointer;
                 transition: 0.2s;
                 font-weight: bold;
+                color: var(--text-main);
+                text-decoration: none;
             }
             .server-icon:hover,
             .server-icon.active {
@@ -60,6 +57,7 @@
                 color: white;
             }
 
+            /* Channel/Settings Sidebar */
             #channel-sidebar {
                 width: 240px;
                 background: var(--bg-sidebar);
@@ -67,14 +65,20 @@
                 display: flex;
                 flex-direction: column;
             }
+            #user-info {
+                padding: 10px;
+                background: rgba(0, 0, 0, 0.2);
+                border-radius: 5px;
+                margin-bottom: 15px;
+            }
 
+            /* Chat Area */
             #chat-container {
                 flex-grow: 1;
                 min-width: 0;
                 background: var(--bg-chat);
                 display: flex;
                 flex-direction: column;
-                overflow-wrap: break-word;
             }
             #messages {
                 flex-grow: 1;
@@ -85,7 +89,10 @@
             }
             #messages li {
                 margin-bottom: 15px;
-                overflow-wrap: break-word;
+            }
+            #messages li.grouped {
+                margin-top: -10px;
+                padding-left: 0;
             }
             .msg-user {
                 font-weight: bold;
@@ -97,17 +104,32 @@
                 color: #72767d;
             }
 
+            /* Inputs/Buttons */
             #input-area {
                 padding: 20px;
+                display: flex;
+                gap: 10px;
             }
             #msg-input {
-                width: 100%;
+                flex-grow: 1;
                 padding: 12px;
                 border-radius: 8px;
                 border: none;
                 background: #40444b;
                 color: white;
-                box-sizing: border-box;
+            }
+            button {
+                padding: 10px;
+                background: var(--accent);
+                border: none;
+                color: white;
+                border-radius: 4px;
+                cursor: pointer;
+                font-weight: bold;
+            }
+            .btn-danger {
+                background: var(--danger);
+                margin-top: 5px;
             }
 
             #auth-overlay {
@@ -135,31 +157,6 @@
                 border: none;
                 background: #202225;
                 color: white;
-            }
-            button {
-                padding: 10px;
-                background: var(--accent);
-                border: none;
-                color: white;
-                border-radius: 4px;
-                cursor: pointer;
-                font-weight: bold;
-            }
-
-            hr {
-                border: 0;
-                border-top: 1px solid #444;
-                width: 100%;
-                margin: 10px 0;
-            }
-            .bg-image {
-                position: fixed;
-                top: 0;
-                left: 0;
-                width: 100vw;
-                height: 100vh;
-                object-fit: cover;
-                z-index: -1;
             }
         </style>
     </head>
@@ -190,7 +187,7 @@
             <div class="server-icon" onclick="joinServer()" title="Join Server">
                 🔍
             </div>
-            <hr />
+            <hr style="width: 40px; border: 1px solid #444; margin: 5px 0" />
             <div id="server-list"></div>
         </div>
 
@@ -198,23 +195,44 @@
             <h3 id="current-server-name">Select a Server</h3>
             <p
                 id="invite-display"
-                style="font-size: 12px; color: #aaa; margin-top: -10px"
+                style="font-size: 11px; color: #aaa; margin-top: -10px"
             ></p>
-            <div
-                style="
-                    margin-top: 10px;
-                    display: flex;
-                    flex-direction: column;
-                    gap: 5px;
-                "
-            >
+
+            <div id="user-info">
+                <div style="font-size: 12px; color: #aaa">Logged in as:</div>
+                <div
+                    id="display-name-text"
+                    style="font-weight: bold; color: #fff"
+                >
+                    ...
+                </div>
+            </div>
+
+            <div style="display: flex; flex-direction: column; gap: 5px">
                 <button
                     onclick="changeUsername()"
                     style="background: #4f545c; font-size: 12px"
                 >
                     Edit Username
                 </button>
+                <button
+                    id="leave-btn"
+                    onclick="leaveServer()"
+                    class="btn-danger"
+                    style="display: none"
+                >
+                    Leave Server
+                </button>
+                <button
+                    id="delete-btn"
+                    onclick="deleteServer()"
+                    class="btn-danger"
+                    style="display: none; background: #a12d2f"
+                >
+                    Delete Server
+                </button>
             </div>
+
             <button
                 onclick="logout()"
                 style="margin-top: auto; background: #444"
@@ -225,10 +243,10 @@
 
         <div id="chat-container">
             <ul id="messages"></ul>
-            <form id="input-area" style="display: flex; gap: 10px">
+            <form id="input-area">
                 <input
                     id="msg-input"
-                    placeholder="select a server to chat..."
+                    placeholder="Select a server..."
                     disabled
                 />
                 <input
@@ -266,6 +284,7 @@
                 serverTimestamp,
                 getDocs,
                 doc,
+                deleteDoc,
             } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
             import {
                 getAuth,
@@ -275,14 +294,6 @@
                 signOut,
                 updateProfile,
             } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
-            import {
-                getDatabase,
-                ref,
-                set,
-                onValue,
-                onDisconnect,
-                serverTimestamp as rtdbTimestamp,
-            } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
 
             const firebaseConfig = {
                 apiKey: "AIzaSyCRB2celD-ShWGOIXm2fpYLQXz36IB5vfE",
@@ -296,11 +307,18 @@
             const app = initializeApp(firebaseConfig);
             const auth = getAuth(app);
             const db = getFirestore(app);
-            const rtdb = getDatabase(app);
 
             let currentUser = null;
             let currentServerId = null;
             let unsubMessages = null;
+
+            // --- PANIC FEATURE (CTRL + K) ---
+            document.addEventListener("keydown", (e) => {
+                if (e.ctrlKey && e.key.toLowerCase() === "k") {
+                    e.preventDefault();
+                    window.location.href = "https://www.google.com/drive/";
+                }
+            });
 
             // --- AUTH ---
             window._handleAuth = (type) => {
@@ -320,12 +338,22 @@
                     currentUser = user;
                     document.getElementById("auth-overlay").style.display =
                         "none";
+                    document.getElementById("display-name-text").innerText =
+                        user.displayName || user.email.split("@")[0];
                     loadUserServers();
                 } else {
                     document.getElementById("auth-overlay").style.display =
                         "flex";
                 }
             });
+
+            window.changeUsername = async () => {
+                const newName = prompt("Enter new username:");
+                if (!newName) return;
+                await updateProfile(auth.currentUser, { displayName: newName });
+                document.getElementById("display-name-text").innerText =
+                    newName;
+            };
 
             // --- SERVERS ---
             window.createServer = async () => {
@@ -389,14 +417,17 @@
                 });
             }
 
-            async function selectServer(id, name) {
+            window.selectServer = async (id, name) => {
                 currentServerId = id;
                 document.getElementById("current-server-name").innerText = name;
                 document.getElementById("msg-input").disabled = false;
                 document.getElementById("msg-input").placeholder =
                     `Message ${name}`;
+                document.getElementById("leave-btn").style.display = "block";
 
-                // Fetch invite code
+                // Show delete button only if you are (ideally) the owner
+                document.getElementById("delete-btn").style.display = "block";
+
                 const q = query(collection(db, "servers"));
                 const snap = await getDocs(q);
                 const sInfo = snap.docs.find((d) => d.id === id);
@@ -405,82 +436,76 @@
                         `CODE: ${sInfo.data().inviteCode}`;
 
                 loadMessages(id);
-            }
+            };
+
+            window.leaveServer = async () => {
+                if (!currentServerId || !confirm("Leave this server?")) return;
+                const q = query(
+                    collection(db, "members"),
+                    where("serverId", "==", currentServerId),
+                    where("userId", "==", currentUser.uid),
+                );
+                const snap = await getDocs(q);
+                snap.forEach(
+                    async (d) => await deleteDoc(doc(db, "members", d.id)),
+                );
+                location.reload();
+            };
+
+            window.deleteServer = async () => {
+                if (!currentServerId || !confirm("DELETE SERVER PERMANENTLY?"))
+                    return;
+                await deleteDoc(doc(db, "servers", currentServerId));
+                location.reload();
+            };
 
             // --- MESSAGES ---
             function loadMessages(serverId) {
                 if (unsubMessages) unsubMessages();
-
-                // IMPORTANT: Combined where + orderBy requires an Index.
-                // If it fails, check your Browser Console for a link to create it.
                 const q = query(
                     collection(db, "messages"),
                     where("serverId", "==", serverId),
                     orderBy("createdAt", "asc"),
                 );
+                unsubMessages = onSnapshot(q, (snap) => {
+                    const list = document.getElementById("messages");
+                    list.innerHTML = "";
+                    let lastMsg = null;
+                    snap.forEach((doc) => {
+                        const data = doc.data();
+                        const createdAt = data.createdAt?.toDate();
+                        const time = createdAt
+                            ? createdAt.toLocaleTimeString([], {
+                                  hour: "2-digit",
+                                  minute: "2-digit",
+                              })
+                            : "...";
+                        const li = document.createElement("li");
+                        const isImg = (url) =>
+                            typeof url === "string" &&
+                            (url.startsWith("data:image") ||
+                                /\.(jpg|jpeg|png|gif)$/i.test(url));
+                        let content = isImg(data.text)
+                            ? `<img src="${data.text}" style="max-width: 100%; max-height: 300px; border-radius: 8px; display: block; margin-top: 5px;">`
+                            : data.text;
 
-                unsubMessages = onSnapshot(
-                    q,
-                    (snap) => {
-                        const list = document.getElementById("messages");
-                        list.innerHTML = "";
-                        let lastMsg = null;
-
-                        snap.forEach((doc) => {
-                            const data = doc.data();
-                            const createdAt = data.createdAt?.toDate();
-                            const time = createdAt
-                                ? createdAt.toLocaleTimeString([], {
-                                      hour: "2-digit",
-                                      minute: "2-digit",
-                                  })
-                                : "...";
-
-                            const li = document.createElement("li");
-                            const isImg = (url) =>
-                                typeof url === "string" &&
-                                (url.startsWith("data:image") ||
-                                    /\.(jpg|jpeg|png|gif)$/i.test(url));
-
-                            let content = isImg(data.text)
-                                ? `<img src="${data.text}" style="max-width: 100%; max-height: 300px; border-radius: 8px; display: block; margin-top: 5px;">`
-                                : data.text;
-
-                            if (
-                                lastMsg &&
-                                lastMsg.user === data.user &&
-                                createdAt - lastMsg.createdAt?.toDate() < 300000
-                            ) {
-                                li.className = "grouped";
-                                li.innerHTML = `<div>${content}</div>`;
-                            } else {
-                                li.innerHTML = `<span class="msg-user">${data.user}</span><span class="msg-time">${time}</span><br>${content}`;
-                            }
-                            list.appendChild(li);
-                            lastMsg = data;
-                        });
-                        list.scrollTop = list.scrollHeight;
-                    },
-                    (error) => {
-                        console.error("Snapshot error:", error);
-                        // If index is missing, retry without orderBy just to show SOMETHING
-                        if (error.code === "failed-precondition") {
-                            console.warn(
-                                "Falling back to unordered view. Please create the index via the link in console.",
-                            );
-                            const fallbackQ = query(
-                                collection(db, "messages"),
-                                where("serverId", "==", serverId),
-                            );
-                            onSnapshot(fallbackQ, (s) => {
-                                /* Render logic here if needed */
-                            });
+                        if (
+                            lastMsg &&
+                            lastMsg.user === data.user &&
+                            createdAt - lastMsg.createdAt?.toDate() < 300000
+                        ) {
+                            li.className = "grouped";
+                            li.innerHTML = `<div>${content}</div>`;
+                        } else {
+                            li.innerHTML = `<span class="msg-user">${data.user}</span><span class="msg-time">${time}</span><br>${content}`;
                         }
-                    },
-                );
+                        list.appendChild(li);
+                        lastMsg = data;
+                    });
+                    list.scrollTop = list.scrollHeight;
+                });
             }
 
-            // --- INPUT ---
             document.getElementById("input-area").onsubmit = async (e) => {
                 e.preventDefault();
                 const val = document.getElementById("msg-input").value;
@@ -489,26 +514,24 @@
                 await addDoc(collection(db, "messages"), {
                     text: val,
                     user:
-                        currentUser.displayName ||
-                        currentUser.email.split("@")[0],
+                        auth.currentUser.displayName ||
+                        auth.currentUser.email.split("@")[0],
                     serverId: currentServerId,
                     createdAt: serverTimestamp(),
                 });
             };
 
-            // Image Upload
             document.getElementById("file-chooser").onchange = async (e) => {
                 const file = e.target.files[0];
                 if (!file || !currentServerId) return;
-
                 const reader = new FileReader();
                 reader.readAsDataURL(file);
                 reader.onload = async () => {
                     await addDoc(collection(db, "messages"), {
-                        text: reader.result, // Small images work best as Base64 in Firestore
+                        text: reader.result,
                         user:
-                            currentUser.displayName ||
-                            currentUser.email.split("@")[0],
+                            auth.currentUser.displayName ||
+                            auth.currentUser.email.split("@")[0],
                         serverId: currentServerId,
                         createdAt: serverTimestamp(),
                     });

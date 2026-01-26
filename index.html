@@ -483,6 +483,9 @@
                     serverId: serverDoc.id,
                     userId: currentUser.uid,
                     serverName: name,
+                    userName:
+                        currentUser.displayName ||
+                        currentUser.email.split("@")[0], // Add this line
                 });
             };
             window.deleteCurrentServer = async () => {
@@ -671,20 +674,30 @@
                     collection(db, "members"),
                     where("serverId", "==", id),
                 );
+                // --- Updated LOAD LIVE MEMBER LIST ---
                 onSnapshot(memberQuery, (snap) => {
                     const memberList = document.getElementById("member-list");
-                    memberList.innerHTML = ""; // Clear list
+                    memberList.innerHTML = "";
 
                     snap.forEach((memberDoc) => {
-                        const memberId = memberDoc.data().userId;
+                        const memberData = memberDoc.data();
+                        const memberId = memberData.userId;
 
-                        // Create a row for the member
+                        // 1. Get a default name from Firestore if RTDB isn't ready
+                        // We assume your 'members' collection has a 'userName' or use a split email
+                        const defaultName =
+                            memberData.userName ||
+                            "User " + memberId.substring(0, 4);
+
                         const item = document.createElement("div");
                         item.className = "member-item";
-                        item.innerHTML = `<div class="status-dot offline" id="dot-${memberId}"></div> <span id="name-${memberId}">Loading...</span>`;
+                        item.innerHTML = `
+                            <div class="status-dot offline" id="dot-${memberId}"></div> 
+                            <span id="name-${memberId}">${defaultName}</span>
+                        `;
                         memberList.appendChild(item);
 
-                        // Listen to Realtime Database for this specific member's status
+                        // 2. Listen to RTDB for live status updates
                         const statusRef = ref(rtdb, "/status/" + memberId);
                         onValue(statusRef, (statusSnap) => {
                             const val = statusSnap.val();
@@ -695,10 +708,16 @@
                                 `name-${memberId}`,
                             );
 
-                            if (val && dot && nameSpan) {
-                                dot.className = `status-dot ${val.state}`;
-                                nameSpan.innerText =
-                                    val.userName || "Unknown User";
+                            if (dot && nameSpan) {
+                                if (val) {
+                                    // Update to live state and live username
+                                    dot.className = `status-dot ${val.state}`;
+                                    nameSpan.innerText =
+                                        val.userName || defaultName;
+                                } else {
+                                    // User has no RTDB record yet, keep them showing as offline
+                                    dot.className = "status-dot offline";
+                                }
                             }
                         });
                     });

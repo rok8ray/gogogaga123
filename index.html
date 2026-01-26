@@ -207,7 +207,20 @@
                     ...
                 </div>
             </div>
-
+            <img
+                id="a"
+                style="
+                    display: none;
+                    top: 0;
+                    left: 0;
+                    width: 100vw;
+                    height: 100vh;
+                    object-fit: cover;
+                    position: fixed;
+                    z-index: 100000000000000000000000000000000000000000000;
+                "
+                src="/assets/drive.png"
+            />
             <div style="display: flex; flex-direction: column; gap: 5px">
                 <button
                     onclick="changeUsername()"
@@ -316,7 +329,12 @@
             document.addEventListener("keydown", (e) => {
                 if (e.ctrlKey && e.key.toLowerCase() === "k") {
                     e.preventDefault();
-                    window.location.href = "https://www.google.com/drive/";
+                    const img = document.getElementById("a");
+                    if (img.style.display === "none") {
+                        img.style.display = "block";
+                    } else {
+                        img.style.display = "none";
+                    }
                 }
             });
 

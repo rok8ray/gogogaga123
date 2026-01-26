@@ -178,6 +178,23 @@
                 object-fit: cover; /* This is the "magic" that prevents stretching */
                 z-index: -1; /* Puts the image behind your text/buttons */
             }
+            .member-item {
+                display: flex;
+                align-items: center;
+                gap: 10px;
+                font-size: 14px;
+            }
+            .status-dot {
+                width: 10px;
+                height: 10px;
+                border-radius: 50%;
+            }
+            .online {
+                background: #3ba55d;
+            } /* Green */
+            .offline {
+                background: #747f8d;
+            } /* Gray */
         </style>
     </head>
     <body>
@@ -254,6 +271,21 @@
             >
                 Leave Server
             </button>
+            <div id="member-list-container" style="margin-top: 20px">
+                <h4
+                    style="
+                        font-size: 12px;
+                        color: #72767d;
+                        text-transform: uppercase;
+                    "
+                >
+                    Members
+                </h4>
+                <div
+                    id="member-list"
+                    style="display: flex; flex-direction: column; gap: 8px"
+                ></div>
+            </div>
 
             <button
                 onclick="logout()"
@@ -322,6 +354,18 @@
                 EmailAuthProvider, // Add this
                 reauthenticateWithCredential, // Add this
             } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
+            // Add these to your existing imports
+            import {
+                getDatabase,
+                ref,
+                onValue,
+                set,
+                onDisconnect,
+                serverTimestamp as rtdbTimestamp,
+            } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
+
+            // Initialize RTDB
+            const rtdb = getDatabase(app);
 
             const firebaseConfig = {
                 apiKey: "AIzaSyCRB2celD-ShWGOIXm2fpYLQXz36IB5vfE",
@@ -384,6 +428,37 @@
                     currentUser = user;
                     document.getElementById("auth-overlay").style.display =
                         "none";
+
+                    // --- STEP 2: PRESENCE LOGIC ---
+                    // References to this user's status in the Realtime Database
+                    const userStatusRef = ref(rtdb, "/status/" + user.uid);
+
+                    const isOfflineForRTDB = {
+                        state: "offline",
+                        last_changed: rtdbTimestamp(),
+                        userName: user.displayName || user.email.split("@")[0],
+                    };
+
+                    const isOnlineForRTDB = {
+                        state: "online",
+                        last_changed: rtdbTimestamp(),
+                        userName: user.displayName || user.email.split("@")[0],
+                    };
+
+                    // Check connection state
+                    onValue(ref(rtdb, ".info/connected"), (snapshot) => {
+                        if (snapshot.val() === false) return;
+
+                        // When I close the tab, automatically set me to offline
+                        onDisconnect(userStatusRef)
+                            .set(isOfflineForRTDB)
+                            .then(() => {
+                                // While I am here, set me to online
+                                set(userStatusRef, isOnlineForRTDB);
+                            });
+                    });
+                    // ------------------------------
+
                     loadUserServers();
                 } else {
                     document.getElementById("auth-overlay").style.display =
@@ -578,32 +653,58 @@
                 document.getElementById("msg-input").placeholder =
                     `Message ${name}`;
 
-                // Get invite code
-                try {
-                    const q_server = query(collection(db, "servers"));
-                    const snap_server = await getDocs(q_server);
-                    const serverInfo = snap_server.docs.find(
-                        (d) => d.id === id,
-                    );
-                    if (serverInfo) {
-                        const serverData = serverInfo.data();
-                        document.getElementById("invite-display").innerText =
-                            `Invite Code: ${serverData.inviteCode}`;
-
-                        const deleteBtn = document.getElementById("delete-btn");
-                        const leaveBtn = document.getElementById("leave-btn");
-
-                        if (serverData.owner === currentUser.uid) {
-                            deleteBtn.style.display = "block";
-                            leaveBtn.style.display = "none";
-                        } else {
-                            deleteBtn.style.display = "none";
-                            leaveBtn.style.display = "block";
-                        }
-                    }
-                } catch (err) {
-                    console.error("Error fetching server info:", err);
+                // 1. Handle Server Settings (Invite Code, Delete/Leave buttons)
+                const q_server = await getDocs(
+                    query(collection(db, "servers")),
+                );
+                const serverInfo = q_server.docs.find((d) => d.id === id);
+                if (serverInfo) {
+                    const data = serverInfo.data();
+                    document.getElementById("invite-display").innerText =
+                        `Code: ${data.inviteCode}`;
+                    document.getElementById("delete-btn").style.display =
+                        data.owner === currentUser.uid ? "block" : "none";
+                    document.getElementById("leave-btn").style.display =
+                        data.owner === currentUser.uid ? "none" : "block";
                 }
+
+                // 2. STEP 5: LOAD LIVE MEMBER LIST
+                const memberQuery = query(
+                    collection(db, "members"),
+                    where("serverId", "==", id),
+                );
+                onSnapshot(memberQuery, (snap) => {
+                    const memberList = document.getElementById("member-list");
+                    memberList.innerHTML = ""; // Clear list
+
+                    snap.forEach((memberDoc) => {
+                        const memberId = memberDoc.data().userId;
+
+                        // Create a row for the member
+                        const item = document.createElement("div");
+                        item.className = "member-item";
+                        item.innerHTML = `<div class="status-dot offline" id="dot-${memberId}"></div> <span id="name-${memberId}">Loading...</span>`;
+                        memberList.appendChild(item);
+
+                        // Listen to Realtime Database for this specific member's status
+                        const statusRef = ref(rtdb, "/status/" + memberId);
+                        onValue(statusRef, (statusSnap) => {
+                            const val = statusSnap.val();
+                            const dot = document.getElementById(
+                                `dot-${memberId}`,
+                            );
+                            const nameSpan = document.getElementById(
+                                `name-${memberId}`,
+                            );
+
+                            if (val && dot && nameSpan) {
+                                dot.className = `status-dot ${val.state}`;
+                                nameSpan.innerText =
+                                    val.userName || "Unknown User";
+                            }
+                        });
+                    });
+                });
 
                 loadMessages();
             }

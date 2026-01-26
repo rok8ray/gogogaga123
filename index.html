@@ -583,10 +583,15 @@
 
                 if (!snap.empty) {
                     const server = snap.docs[0];
+                    // Inside window.joinServer...
                     await addDoc(collection(db, "members"), {
                         serverId: server.id,
                         userId: currentUser.uid,
                         serverName: server.data().name,
+                        // ADD THIS LINE BELOW
+                        userName:
+                            currentUser.displayName ||
+                            currentUser.email.split("@")[0],
                     });
                 } else {
                     alert("Invalid Code");
@@ -675,6 +680,7 @@
                     where("serverId", "==", id),
                 );
                 // --- Updated LOAD LIVE MEMBER LIST ---
+                // --- Updated LOAD LIVE MEMBER LIST section ---
                 onSnapshot(memberQuery, (snap) => {
                     const memberList = document.getElementById("member-list");
                     memberList.innerHTML = "";
@@ -683,8 +689,10 @@
                         const memberData = memberDoc.data();
                         const memberId = memberData.userId;
 
-                        // 1. Get a default name from Firestore if RTDB isn't ready
-                        // We assume your 'members' collection has a 'userName' or use a split email
+                        // IMPROVED FALLBACK:
+                        // 1. Check for userName in the member document
+                        // 2. If missing, use the current user's email prefix as a guess (only works for 'you')
+                        // 3. Otherwise, use the short ID as a last resort
                         const defaultName =
                             memberData.userName ||
                             "User " + memberId.substring(0, 4);
@@ -697,7 +705,6 @@
                         `;
                         memberList.appendChild(item);
 
-                        // 2. Listen to RTDB for live status updates
                         const statusRef = ref(rtdb, "/status/" + memberId);
                         onValue(statusRef, (statusSnap) => {
                             const val = statusSnap.val();
@@ -710,12 +717,12 @@
 
                             if (dot && nameSpan) {
                                 if (val) {
-                                    // Update to live state and live username
                                     dot.className = `status-dot ${val.state}`;
-                                    nameSpan.innerText =
-                                        val.userName || defaultName;
+                                    // This ensures that as soon as they are online,
+                                    // their REAL username from their session is pulled in
+                                    if (val.userName)
+                                        nameSpan.innerText = val.userName;
                                 } else {
-                                    // User has no RTDB record yet, keep them showing as offline
                                     dot.className = "status-dot offline";
                                 }
                             }

@@ -298,6 +298,7 @@
                 getDocs,
                 doc,
                 deleteDoc,
+                limit,
             } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
             import {
                 getAuth,
@@ -480,16 +481,25 @@
             // --- MESSAGES ---
             function loadMessages(serverId) {
                 if (unsubMessages) unsubMessages();
+
+                // 1. Query for the 75 newest messages
                 const q = query(
                     collection(db, "messages"),
                     where("serverId", "==", serverId),
-                    orderBy("createdAt", "asc"),
+                    orderBy("createdAt", "desc"), // Get newest first
+                    limit(75), // Stop after 75
                 );
+
                 unsubMessages = onSnapshot(q, (snap) => {
                     const list = document.getElementById("messages");
                     list.innerHTML = "";
+
+                    // 2. Convert docs to an array and REVERSE it
+                    // This ensures the 75th message is at the top and the newest is at the bottom
+                    const docs = [...snap.docs].reverse();
+
                     let lastMsg = null;
-                    snap.forEach((doc) => {
+                    docs.forEach((doc) => {
                         const data = doc.data();
                         const createdAt = data.createdAt?.toDate();
                         const time = createdAt
@@ -498,11 +508,13 @@
                                   minute: "2-digit",
                               })
                             : "...";
+
                         const li = document.createElement("li");
                         const isImg = (url) =>
                             typeof url === "string" &&
                             (url.startsWith("data:image") ||
                                 /\.(jpg|jpeg|png|gif)$/i.test(url));
+
                         let content = isImg(data.text)
                             ? `<img src="${data.text}" style="max-width: 100%; max-height: 300px; border-radius: 8px; display: block; margin-top: 5px;">`
                             : data.text;
@@ -517,6 +529,7 @@
                         } else {
                             li.innerHTML = `<span class="msg-user">${data.user}</span><span class="msg-time">${time}</span><br>${content}`;
                         }
+
                         list.appendChild(li);
                         lastMsg = data;
                     });

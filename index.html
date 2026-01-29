@@ -444,38 +444,80 @@
                     `Message ${name}`;
                 document.getElementById("leave-btn").style.display = "block";
 
-                // Show delete button only if you are (ideally) the owner
-                document.getElementById("delete-btn").style.display = "block";
-
                 const q = query(collection(db, "servers"));
                 const snap = await getDocs(q);
                 const sInfo = snap.docs.find((d) => d.id === id);
-                if (sInfo)
+
+                if (sInfo) {
                     document.getElementById("invite-display").innerText =
                         `CODE: ${sInfo.data().inviteCode}`;
+
+                    // ADMIN UI LOGIC:
+                    const isOwner = sInfo.data().owner === currentUser.uid;
+                    document.getElementById("delete-btn").style.display =
+                        isOwner ? "block" : "none";
+                }
 
                 loadMessages(id);
             };
 
             window.leaveServer = async () => {
                 if (!currentServerId || !confirm("Leave this server?")) return;
+
                 const q = query(
                     collection(db, "members"),
                     where("serverId", "==", currentServerId),
                     where("userId", "==", currentUser.uid),
                 );
+
                 const snap = await getDocs(q);
-                snap.forEach(
-                    async (d) => await deleteDoc(doc(db, "members", d.id)),
+
+                // Create an array of promises for all member records found
+                const deletePromises = snap.docs.map((d) =>
+                    deleteDoc(doc(db, "members", d.id)),
                 );
+
+                // WAIT for all deletions to finish
+                await Promise.all(deletePromises);
+
                 location.reload();
             };
 
             window.deleteServer = async () => {
-                if (!currentServerId || !confirm("DELETE SERVER PERMANENTLY?"))
+                if (!currentServerId) return;
+
+                // 1. Fetch the server data to check ownership
+                const serverRef = doc(db, "servers", currentServerId);
+                const serverSnap = await getDocs(
+                    query(collection(db, "servers")),
+                ); // Simplified for your current structure
+                const serverDoc = serverSnap.docs.find(
+                    (d) => d.id === currentServerId,
+                );
+
+                if (!serverDoc) return;
+
+                // 2. Admin Check
+                if (serverDoc.data().owner !== currentUser.uid) {
+                    alert("Only the server owner can delete this server.");
                     return;
-                await deleteDoc(doc(db, "servers", currentServerId));
-                location.reload();
+                }
+
+                // 3. Confirm and Delete
+                if (
+                    !confirm(
+                        "DELETE SERVER PERMANENTLY? This cannot be undone.",
+                    )
+                )
+                    return;
+
+                try {
+                    await deleteDoc(serverRef);
+                    // Optional: Also delete all 'members' and 'messages' associated with this ID here
+                    location.reload();
+                } catch (error) {
+                    alert("Error deleting server: " + error.message);
+                }
             };
 
             // --- MESSAGES ---

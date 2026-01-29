@@ -103,6 +103,29 @@
                 font-size: 0.75rem;
                 color: #72767d;
             }
+            /* 1. Hide the delete button by default */
+            .delete-btn {
+                opacity: 0;
+                transition: opacity 0.2s ease;
+                cursor: pointer;
+                color: var(--danger);
+                margin-left: 8px;
+                font-size: 10px;
+                font-weight: bold;
+                background: rgba(0, 0, 0, 0.1);
+                padding: 2px 5px;
+                border-radius: 4px;
+            }
+
+            /* 2. Show the button when the parent <li> is hovered */
+            #messages li:hover .delete-btn {
+                opacity: 1;
+            }
+
+            /* 3. Also show it when a grouped message is hovered */
+            .grouped:hover .delete-btn {
+                opacity: 1;
+            }
 
             /* Inputs/Buttons */
             #input-area {
@@ -523,9 +546,10 @@
                         const isSender = data.user === currentUserName;
                         const isOwner = currentUser.uid === currentServerOwner;
 
+                        // Replace the old deleteBtn line with this one:
                         const deleteBtn =
                             isSender || isOwner
-                                ? `<span onclick="deleteMessage('${messageId}')" style="cursor:pointer; color:var(--danger); margin-left:8px; font-size:10px; font-weight:bold;">[×]</span>`
+                                ? `<span class="delete-btn" onclick="deleteMessage('${messageId}')">❌</span>`
                                 : "";
 
                         const li = document.createElement("li");

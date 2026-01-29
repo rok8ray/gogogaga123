@@ -324,6 +324,7 @@
 
             let currentUser = null;
             let currentServerId = null;
+            let currentServerOwner = null;
             let unsubMessages = null;
 
             // --- PANIC FEATURE (CTRL + K) ---
@@ -331,11 +332,8 @@
                 if (e.ctrlKey && e.key.toLowerCase() === "k") {
                     e.preventDefault();
                     const img = document.getElementById("a");
-                    if (img.style.display === "none") {
-                        img.style.display = "block";
-                    } else {
-                        img.style.display = "none";
-                    }
+                    img.style.display =
+                        img.style.display === "none" ? "block" : "none";
                 }
             });
 
@@ -449,100 +447,68 @@
                 const sInfo = snap.docs.find((d) => d.id === id);
 
                 if (sInfo) {
+                    const sData = sInfo.data();
+                    currentServerOwner = sData.owner;
                     document.getElementById("invite-display").innerText =
-                        `CODE: ${sInfo.data().inviteCode}`;
-
-                    // ADMIN UI LOGIC:
-                    const isOwner = sInfo.data().owner === currentUser.uid;
+                        `CODE: ${sData.inviteCode}`;
+                    const isOwner = sData.owner === currentUser.uid;
                     document.getElementById("delete-btn").style.display =
                         isOwner ? "block" : "none";
                 }
-
                 loadMessages(id);
             };
 
             window.leaveServer = async () => {
                 if (!currentServerId || !confirm("Leave this server?")) return;
-
                 const q = query(
                     collection(db, "members"),
                     where("serverId", "==", currentServerId),
                     where("userId", "==", currentUser.uid),
                 );
-
                 const snap = await getDocs(q);
-
-                // Create an array of promises for all member records found
-                const deletePromises = snap.docs.map((d) =>
-                    deleteDoc(doc(db, "members", d.id)),
+                await Promise.all(
+                    snap.docs.map((d) => deleteDoc(doc(db, "members", d.id))),
                 );
-
-                // WAIT for all deletions to finish
-                await Promise.all(deletePromises);
-
                 location.reload();
             };
 
             window.deleteServer = async () => {
-                if (!currentServerId) return;
-
-                // 1. Fetch the server data to check ownership
-                const serverRef = doc(db, "servers", currentServerId);
-                const serverSnap = await getDocs(
-                    query(collection(db, "servers")),
-                ); // Simplified for your current structure
-                const serverDoc = serverSnap.docs.find(
-                    (d) => d.id === currentServerId,
-                );
-
-                if (!serverDoc) return;
-
-                // 2. Admin Check
-                if (serverDoc.data().owner !== currentUser.uid) {
-                    alert("Only the server owner can delete this server.");
+                if (!currentServerId || !confirm("DELETE SERVER PERMANENTLY?"))
                     return;
-                }
+                if (currentServerOwner !== currentUser.uid)
+                    return alert("Unauthorized");
+                await deleteDoc(doc(db, "servers", currentServerId));
+                location.reload();
+            };
 
-                // 3. Confirm and Delete
-                if (
-                    !confirm(
-                        "DELETE SERVER PERMANENTLY? This cannot be undone.",
-                    )
-                )
-                    return;
-
+            // --- MESSAGES & DELETION ---
+            window.deleteMessage = async (messageId) => {
+                if (!confirm("Delete this message?")) return;
                 try {
-                    await deleteDoc(serverRef);
-                    // Optional: Also delete all 'members' and 'messages' associated with this ID here
-                    location.reload();
-                } catch (error) {
-                    alert("Error deleting server: " + error.message);
+                    await deleteDoc(doc(db, "messages", messageId));
+                } catch (err) {
+                    alert("Error deleting message: " + err.message);
                 }
             };
 
-            // --- MESSAGES ---
             function loadMessages(serverId) {
                 if (unsubMessages) unsubMessages();
-
-                // 1. Query for the 75 newest messages
                 const q = query(
                     collection(db, "messages"),
                     where("serverId", "==", serverId),
-                    orderBy("createdAt", "desc"), // Get newest first
-                    limit(75), // Stop after 75
+                    orderBy("createdAt", "desc"),
+                    limit(75),
                 );
 
                 unsubMessages = onSnapshot(q, (snap) => {
                     const list = document.getElementById("messages");
                     list.innerHTML = "";
-
-                    // 2. Convert docs to an array and REVERSE it
-                    // This ensures the 75th message is at the top and the newest is at the bottom
                     const docs = [...snap.docs].reverse();
-
                     let lastMsg = null;
+
                     docs.forEach((doc) => {
                         const data = doc.data();
+                        const messageId = doc.id;
                         const createdAt = data.createdAt?.toDate();
                         const time = createdAt
                             ? createdAt.toLocaleTimeString([], {
@@ -551,12 +517,22 @@
                               })
                             : "...";
 
+                        const currentUserName =
+                            currentUser.displayName ||
+                            currentUser.email.split("@")[0];
+                        const isSender = data.user === currentUserName;
+                        const isOwner = currentUser.uid === currentServerOwner;
+
+                        const deleteBtn =
+                            isSender || isOwner
+                                ? `<span onclick="deleteMessage('${messageId}')" style="cursor:pointer; color:var(--danger); margin-left:8px; font-size:10px; font-weight:bold;">[×]</span>`
+                                : "";
+
                         const li = document.createElement("li");
                         const isImg = (url) =>
                             typeof url === "string" &&
                             (url.startsWith("data:image") ||
                                 /\.(jpg|jpeg|png|gif)$/i.test(url));
-
                         let content = isImg(data.text)
                             ? `<img src="${data.text}" style="max-width: 100%; max-height: 300px; border-radius: 8px; display: block; margin-top: 5px;">`
                             : data.text;
@@ -567,11 +543,10 @@
                             createdAt - lastMsg.createdAt?.toDate() < 300000
                         ) {
                             li.className = "grouped";
-                            li.innerHTML = `<div>${content}</div>`;
+                            li.innerHTML = `<div>${content} ${deleteBtn}</div>`;
                         } else {
-                            li.innerHTML = `<span class="msg-user">${data.user}</span><span class="msg-time">${time}</span><br>${content}`;
+                            li.innerHTML = `<span class="msg-user">${data.user}</span><span class="msg-time">${time}</span> ${deleteBtn}<br>${content}`;
                         }
-
                         list.appendChild(li);
                         lastMsg = data;
                     });

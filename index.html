@@ -268,6 +268,18 @@
                     Delete Server
                 </button>
             </div>
+            <div
+                id="member-sidebar"
+                style="
+                    width: 200px;
+                    background: var(--bg-sidebar);
+                    padding: 20px;
+                    border-left: 1px solid #222;
+                "
+            >
+                <h3>Members</h3>
+                <ul id="member-list" style="list-style: none; padding: 0"></ul>
+            </div>
 
             <button
                 onclick="logout()"
@@ -395,6 +407,46 @@
                     newName;
             };
 
+            function loadMembers(serverId) {
+                const q = query(
+                    collection(db, "members"),
+                    where("serverId", "==", serverId),
+                );
+
+                onSnapshot(q, (snap) => {
+                    const list = document.getElementById("member-list");
+                    list.innerHTML = "";
+
+                    snap.forEach((doc) => {
+                        const data = doc.data();
+                        const li = document.createElement("li");
+                        li.style.marginBottom = "10px";
+                        li.style.display = "flex";
+                        li.style.justifyContent = "space-between";
+                        li.style.alignItems = "center";
+
+                        // UI for the member name
+                        li.innerHTML = `<span>${data.userId === currentServerOwner ? "👑 " : ""}${data.userId.substring(0, 5)}...</span>`;
+
+                        // If current user is owner, show kick button next to others
+                        if (
+                            currentUser.uid === currentServerOwner &&
+                            data.userId !== currentUser.uid
+                        ) {
+                            const btn = document.createElement("button");
+                            btn.innerText = "Kick";
+                            btn.style.padding = "2px 5px";
+                            btn.style.fontSize = "10px";
+                            btn.className = "btn-danger";
+                            btn.onclick = () => kickMember(data.userId);
+                            li.appendChild(btn);
+                        }
+
+                        list.appendChild(li);
+                    });
+                });
+            }
+
             // --- SERVERS ---
             window.createServer = async () => {
                 const name = prompt("Server Name:");
@@ -479,6 +531,7 @@
                         isOwner ? "block" : "none";
                 }
                 loadMessages(id);
+                loadMembers(id);
             };
 
             window.leaveServer = async () => {
@@ -502,6 +555,43 @@
                     return alert("Unauthorized");
                 await deleteDoc(doc(db, "servers", currentServerId));
                 location.reload();
+            };
+
+            window.kickMember = async (targetUserId) => {
+                if (currentServerOwner !== currentUser.uid) {
+                    return alert("Only the server owner can kick members.");
+                }
+
+                if (targetUserId === currentUser.uid) {
+                    return alert(
+                        "You cannot kick yourself! Use 'Leave Server' instead.",
+                    );
+                }
+
+                if (!confirm("Are you sure you want to kick this member?"))
+                    return;
+
+                try {
+                    // Find the membership document for this user in this server
+                    const q = query(
+                        collection(db, "members"),
+                        where("serverId", "==", currentServerId),
+                        where("userId", "==", targetUserId),
+                    );
+
+                    const snap = await getDocs(q);
+
+                    if (!snap.empty) {
+                        // Delete the membership record
+                        await deleteDoc(doc(db, "members", snap.docs[0].id));
+                        alert("Member kicked successfully.");
+                        // Refresh member list if you have a separate UI for it
+                    } else {
+                        alert("Member not found.");
+                    }
+                } catch (err) {
+                    alert("Error kicking member: " + err.message);
+                }
             };
 
             // --- MESSAGES & DELETION ---

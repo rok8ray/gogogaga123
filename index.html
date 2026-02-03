@@ -305,7 +305,7 @@
                 />
                 <button
                     type="button"
-                    onclick="handleClassroomSelection()"
+                    onclick="sendAssignmentLink()"
                     style="background: #0f9d58"
                     title="Share Assignment"
                 >
@@ -326,7 +326,7 @@
                 if (window._handleAuth) window._handleAuth(type);
             };
         </script>
-        <script src="https://apis.google.com/js/api.js"></script>
+
         <script type="module">
             import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
             import {
@@ -350,8 +350,6 @@
                 onAuthStateChanged,
                 signOut,
                 updateProfile,
-                GoogleAuthProvider,
-                signInWithPopup,
             } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
 
             const firebaseConfig = {
@@ -382,66 +380,6 @@
                 }
             });
 
-            // --- ASSIGNMENT FEATURE ---
-            let googleAccessToken = null;
-
-            window.handleClassroomSelection = async () => {
-                // 1. Get the Google Token if we don't have it
-                if (!googleAccessToken) {
-                    const provider = new GoogleAuthProvider();
-                    // Request specific scopes for Classroom and Drive
-                    provider.addScope(
-                        "https://www.googleapis.com/auth/classroom.courses.readonly",
-                    );
-                    provider.addScope(
-                        "https://www.googleapis.com/auth/drive.readonly",
-                    );
-
-                    try {
-                        const result = await signInWithPopup(auth, provider);
-                        const credential =
-                            GoogleAuthProvider.credentialFromResult(result);
-                        googleAccessToken = credential.accessToken;
-                    } catch (error) {
-                        alert(
-                            "Google permissions are required to share assignments.",
-                        );
-                        return;
-                    }
-                }
-
-                // 2. Launch the Google Picker
-                createPicker();
-            };
-
-            function createPicker() {
-                // This uses the 'google.picker' library which must be loaded in your HTML
-                const picker = new google.picker.PickerBuilder()
-                    .addView(google.picker.ViewId.DOCS) // Users can pick their assignment files
-                    .setOAuthToken(googleAccessToken)
-                    .setDeveloperKey("YOUR_BROWSER_API_KEY") // From Google Cloud Console
-                    .setCallback(pickerCallback)
-                    .build();
-                picker.setVisible(true);
-            }
-
-            async function pickerCallback(data) {
-                if (data.action === google.picker.Action.PICKED) {
-                    const document = data.docs[0];
-                    const fileUrl = document.url;
-                    const fileName = document.name;
-
-                    // 3. Send the link to Firestore
-                    await addDoc(collection(db, "messages"), {
-                        text: `📚 Assignment: [${fileName}](${fileUrl})`,
-                        user:
-                            auth.currentUser.displayName ||
-                            auth.currentUser.email.split("@")[0],
-                        serverId: currentServerId,
-                        createdAt: serverTimestamp(),
-                    });
-                }
-            }
             // --- AUTH ---
             window._handleAuth = (type) => {
                 const email = document.getElementById("email").value;
@@ -517,6 +455,32 @@
                 });
             }
 
+            // --- ASSIGNMENT LINK ---
+            window.sendAssignmentLink = async () => {
+                const url = prompt(
+                    "Paste the Google Classroom Assignment Link:",
+                );
+                if (!url || !url.includes("classroom.google.com")) {
+                    alert("Please enter a valid Google Classroom link.");
+                    return;
+                }
+
+                // Ask for a quick title so the chat looks nice
+                const title =
+                    prompt("Assignment Title (e.g., Math Homework):") ||
+                    "Classroom Assignment";
+
+                await addDoc(collection(db, "messages"), {
+                    text: url,
+                    assignmentTitle: title, // Store extra metadata
+                    isAssignment: true, // Flag this as an assignment
+                    user:
+                        auth.currentUser.displayName ||
+                        auth.currentUser.email.split("@")[0],
+                    serverId: currentServerId,
+                    createdAt: serverTimestamp(),
+                });
+            };
             // --- SERVERS ---
             window.createServer = async () => {
                 const name = prompt("Server Name:");

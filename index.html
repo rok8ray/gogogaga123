@@ -252,6 +252,13 @@
                     Edit Username
                 </button>
                 <button
+                    id="edit-server-btn"
+                    onclick="editServerIcon()"
+                    style="display: block; background: #4f545c; margin-top: 5px"
+                >
+                    Edit Server Icon
+                </button>
+                <button
                     id="leave-btn"
                     onclick="leaveServer()"
                     class="btn-danger"
@@ -342,6 +349,7 @@
                 doc,
                 deleteDoc,
                 limit,
+                updateDoc,
             } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
             import {
                 getAuth,
@@ -433,8 +441,16 @@
                         li.style.justifyContent = "space-between";
                         li.style.alignItems = "center";
 
-                        // UI for the member name
-                        li.innerHTML = `<span>${data.userId === currentServerOwner ? "👑 " : ""}${data.userId.substring(0, 5)}...</span>`;
+                        // Style it to look like a chat member list
+                        li.style.cssText =
+                            "display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; color: #8e9297; font-size: 14px;";
+
+                        // FALLBACK LOGIC: Use displayName if it exists, otherwise use the old ID method
+                        const nameToShow =
+                            data.displayName || data.userId.substring(0, 5);
+                        const isOwner = data.userId === currentServerOwner;
+
+                        li.innerHTML = `<span>${isOwner ? "👑 " : ""}${nameToShow}</span>`;
 
                         // If current user is owner, show kick button next to others
                         if (
@@ -485,19 +501,28 @@
             window.createServer = async () => {
                 const name = prompt("Server Name:");
                 if (!name) return;
+
+                const iconUrl = prompt(
+                    "Server Icon URL (optional - leave blank for letter):",
+                );
+
                 const code = Math.random()
                     .toString(36)
                     .substring(2, 7)
                     .toUpperCase();
+
                 const sDoc = await addDoc(collection(db, "servers"), {
                     name,
                     inviteCode: code,
                     owner: currentUser.uid,
+                    icon: iconUrl || null, // Store the URL or null
                 });
+
                 await addDoc(collection(db, "members"), {
                     serverId: sDoc.id,
                     userId: currentUser.uid,
                     serverName: name,
+                    serverIcon: iconUrl || null, // Also store in members for quick loading
                 });
             };
 
@@ -535,7 +560,19 @@
                             (currentServerId === data.serverId
                                 ? " active"
                                 : "");
-                        el.innerText = data.serverName[0].toUpperCase();
+
+                        // --- NEW ICON LOGIC ---
+                        if (data.serverIcon) {
+                            el.style.backgroundImage = `url('${data.serverIcon}')`;
+                            el.style.backgroundSize = "cover";
+                            el.style.backgroundPosition = "center";
+                            el.innerText = ""; // Clear the letter
+                        } else {
+                            el.innerText = data.serverName[0].toUpperCase();
+                            el.style.backgroundImage = "none";
+                        }
+                        // ----------------------
+
                         el.onclick = () =>
                             selectServer(data.serverId, data.serverName);
                         list.appendChild(el);
@@ -554,6 +591,32 @@
                 const q = query(collection(db, "servers"));
                 const snap = await getDocs(q);
                 const sInfo = snap.docs.find((d) => d.id === id);
+
+                // --- NEW: AUTO-SYNC NAME FOR EXISTING USERS ---
+                const memberQuery = query(
+                    collection(db, "members"),
+                    where("serverId", "==", id),
+                    where("userId", "==", currentUser.uid),
+                );
+                const memberSnap = await getDocs(memberQuery);
+
+                if (!memberSnap.empty) {
+                    const memberDoc = memberSnap.docs[0];
+                    const currentName =
+                        currentUser.displayName ||
+                        currentUser.email.split("@")[0];
+
+                    // If the name is missing in the database, add it now
+                    if (
+                        !memberDoc.data().displayName ||
+                        memberDoc.data().displayName !== currentName
+                    ) {
+                        await updateDoc(doc(db, "members", memberDoc.id), {
+                            displayName: currentName,
+                        });
+                    }
+                }
+                // ----------------------------------------------
 
                 if (sInfo) {
                     const sData = sInfo.data();
@@ -625,6 +688,45 @@
                     }
                 } catch (err) {
                     alert("Error kicking member: " + err.message);
+                }
+            };
+
+            // --- SERVER ICON ---
+            window.editServerIcon = async () => {
+                if (currentServerOwner !== currentUser.uid)
+                    return alert(
+                        "Only owners can change the icon.\n\nSorry for giving you hope lol",
+                    );
+
+                const newIcon = prompt("Paste new Icon URL:");
+                if (newIcon === null) return;
+
+                try {
+                    // 1. Update the main server doc
+                    const serverRef = doc(db, "servers", currentServerId);
+                    await updateDoc(serverRef, { icon: newIcon });
+
+                    // 2. Update the member doc for the CURRENT USER so it shows up in their sidebar immediately
+                    const q = query(
+                        collection(db, "members"),
+                        where("serverId", "==", currentServerId),
+                        where("userId", "==", currentUser.uid),
+                    );
+                    const snap = await getDocs(q);
+                    if (!snap.empty) {
+                        const memberDocRef = doc(
+                            db,
+                            "members",
+                            snap.docs[0].id,
+                        );
+                        await updateDoc(memberDocRef, { serverIcon: newIcon });
+                    }
+
+                    alert(
+                        "Icon updated! Note: Other members will see the icon change next time they join/refresh.",
+                    );
+                } catch (err) {
+                    alert("Error updating icon: " + err.message);
                 }
             };
 

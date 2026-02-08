@@ -1,4 +1,4 @@
-modules = ["nodejs-20"]
+modules = ["nodejs-20", "python-3.11"]
 
 [nix]
 channel = "stable-25_05"
@@ -19,7 +19,7 @@ args = "node server.js"
 waitForPort = 5000
 
 [[workflows.workflow]]
-name = "Run App"
+name = "Project"
 mode = "parallel"
 author = "agent"
 
@@ -27,26 +27,33 @@ author = "agent"
 outputType = "webview"
 
 [[workflows.workflow.tasks]]
-task = "shell.exec"
-args = "node server.js"
-waitForPort = 5000
-
-[[workflows.workflow]]
-name = "Project"
-mode = "parallel"
-author = "agent"
-
-[[workflows.workflow.tasks]]
 task = "workflow.run"
 args = "Run App"
 
-[[ports]]
-localPort = 3000
-externalPort = 3001
+[[workflows.workflow.tasks]]
+task = "workflow.run"
+args = "Transport Server"
+
+[[workflows.workflow]]
+name = "Transport Server"
+mode = "parallel"
+author = "agent"
+
+[workflows.workflow.metadata]
+outputType = "console"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "python3 transport/transport.py"
+waitForPort = 3001
 
 [[ports]]
-localPort = 5000
-externalPort = 80
+localPort = 3000
+externalPort = 3000
+
+[[ports]]
+localPort = 3001
+externalPort = 3001
 
 [deployment]
 run = "npx serve ."

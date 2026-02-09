@@ -445,9 +445,18 @@
                         li.style.cssText =
                             "display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; color: #8e9297; font-size: 14px;";
 
-                        // FALLBACK LOGIC: Use displayName if it exists, otherwise use the old ID method
-                        const nameToShow =
-                            data.displayName || data.userId.substring(0, 5);
+                        // FALLBACK LOGIC: Check for duplicate names and revert to email if necessary
+                        const currentName = data.displayName || data.userId.substring(0, 5);
+                        let nameToShow = currentName;
+
+                        // Logic to check if any other member has this as their display name
+                        const otherMembers = snap.docs.filter(d => d.id !== doc.id);
+                        const isDuplicate = otherMembers.some(d => d.data().displayName === currentName);
+
+                        if (isDuplicate && data.userEmail) {
+                            nameToShow = data.userEmail;
+                        }
+
                         const isOwner = data.userId === currentServerOwner;
 
                         li.innerHTML = `<span>${isOwner ? "👑 " : ""}${nameToShow}</span>`;
@@ -523,6 +532,8 @@
                     userId: currentUser.uid,
                     serverName: name,
                     serverIcon: iconUrl || null, // Also store in members for quick loading
+                    userEmail: currentUser.email,
+                    displayName: currentUser.displayName || currentUser.email.split("@")[0]
                 });
             };
 
@@ -540,6 +551,8 @@
                         serverId: s.id,
                         userId: currentUser.uid,
                         serverName: s.data().name,
+                        userEmail: currentUser.email,
+                        displayName: currentUser.displayName || currentUser.email.split("@")[0]
                     });
                 } else alert("Invalid Code");
             };
@@ -609,10 +622,12 @@
                     // If the name is missing in the database, add it now
                     if (
                         !memberDoc.data().displayName ||
-                        memberDoc.data().displayName !== currentName
+                        memberDoc.data().displayName !== currentName ||
+                        !memberDoc.data().userEmail
                     ) {
                         await updateDoc(doc(db, "members", memberDoc.id), {
                             displayName: currentName,
+                            userEmail: currentUser.email
                         });
                     }
                 }

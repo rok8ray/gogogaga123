@@ -499,9 +499,7 @@
                     text: url,
                     assignmentTitle: title, // Store extra metadata
                     isAssignment: true, // Flag this as an assignment
-                    user:
-                        auth.currentUser.displayName ||
-                        auth.currentUser.email.split("@")[0],
+                    userId: auth.currentUser.uid, // Store UID for security
                     serverId: currentServerId,
                     createdAt: serverTimestamp(),
                 });
@@ -757,82 +755,91 @@
 
             function loadMessages(serverId) {
                 if (unsubMessages) unsubMessages();
-                const q = query(
-                    collection(db, "messages"),
-                    where("serverId", "==", serverId),
-                    orderBy("createdAt", "desc"),
-                    limit(75),
-                );
 
-                unsubMessages = onSnapshot(q, (snap) => {
-                    const list = document.getElementById("messages");
-                    list.innerHTML = "";
-                    const docs = [...snap.docs].reverse();
-                    let lastMsg = null;
-
-                    // Helper function for images
-                    const checkIsImg = (url) =>
-                        typeof url === "string" &&
-                        (url.startsWith("data:image") ||
-                            /\.(jpg|jpeg|png|gif)$/i.test(url));
-
-                    docs.forEach((doc) => {
-                        const data = doc.data();
-                        const messageId = doc.id;
-                        const createdAt = data.createdAt?.toDate();
-                        const time = createdAt
-                            ? createdAt.toLocaleTimeString([], {
-                                  hour: "2-digit",
-                                  minute: "2-digit",
-                              })
-                            : "...";
-
-                        let content = data.text;
-
-                        // 1. Handle Assignment Cards
-                        if (data.isAssignment) {
-                            content = `
-                                <div style="background: #e8f0fe; border-left: 5px solid #1967d2; padding: 12px; border-radius: 4px; color: #1967d2; margin-top: 5px; max-width: 300px;">
-                                    <div style="font-weight: bold; font-size: 14px; margin-bottom: 4px;">📚 ${data.assignmentTitle}</div>
-                                    <a href="${data.text}" target="_blank" style="display: inline-block; background: #1967d2; color: white; padding: 5px 12px; border-radius: 4px; text-decoration: none; font-size: 12px; font-weight: bold;">
-                                        Open in Classroom
-                                    </a>
-                                </div>`;
-                        }
-                        // 2. Handle Images
-                        else if (checkIsImg(data.text)) {
-                            content = `<img src="${data.text}" style="max-width: 100%; max-height: 300px; border-radius: 8px; display: block; margin-top: 5px;">`;
-                        }
-
-                        const currentUserName =
-                            auth.currentUser.displayName ||
-                            auth.currentUser.email.split("@")[0];
-                        const isSender = data.user === currentUserName;
-                        const isOwner = currentUser.uid === currentServerOwner;
-
-                        const deleteBtn =
-                            isSender || isOwner
-                                ? `<span class="delete-btn" onclick="deleteMessage('${messageId}')">❌</span>`
-                                : "";
-
-                        const li = document.createElement("li");
-
-                        // 3. Grouping Logic
-                        if (
-                            lastMsg &&
-                            lastMsg.user === data.user &&
-                            createdAt - lastMsg.createdAt?.toDate() < 300000
-                        ) {
-                            li.className = "grouped";
-                            li.innerHTML = `<div>${content} ${deleteBtn}</div>`;
-                        } else {
-                            li.innerHTML = `<span class="msg-user">${data.user}</span><span class="msg-time">${time}</span> ${deleteBtn}<br>${content}`;
-                        }
-
-                        list.appendChild(li);
-                        lastMsg = { ...data, createdAt: data.createdAt }; // Store for next loop
+                // Load all members for this server once to map UIDs to names
+                const membersQ = query(collection(db, "members"), where("serverId", "==", serverId));
+                getDocs(membersQ).then(memberSnap => {
+                    const memberMap = {};
+                    memberSnap.forEach(mDoc => {
+                        const mData = mDoc.data();
+                        memberMap[mData.userId] = mData.displayName || mData.userEmail || mData.userId.substring(0, 5);
                     });
-                    list.scrollTop = list.scrollHeight;
+
+                    const q = query(
+                        collection(db, "messages"),
+                        where("serverId", "==", serverId),
+                        orderBy("createdAt", "desc"),
+                        limit(75),
+                    );
+
+                    unsubMessages = onSnapshot(q, (snap) => {
+                        const list = document.getElementById("messages");
+                        list.innerHTML = "";
+                        const docs = [...snap.docs].reverse();
+                        let lastMsg = null;
+
+                        // Helper function for images
+                        const checkIsImg = (url) =>
+                            typeof url === "string" &&
+                            (url.startsWith("data:image") ||
+                                /\.(jpg|jpeg|png|gif)$/i.test(url));
+
+                        docs.forEach((doc) => {
+                            const data = doc.data();
+                            const messageId = doc.id;
+                            const createdAt = data.createdAt?.toDate();
+                            const time = createdAt
+                                ? createdAt.toLocaleTimeString([], {
+                                      hour: "2-digit",
+                                      minute: "2-digit",
+                                  })
+                                : "...";
+
+                            let content = data.text;
+
+                            // 1. Handle Assignment Cards
+                            if (data.isAssignment) {
+                                content = `
+                                    <div style="background: #e8f0fe; border-left: 5px solid #1967d2; padding: 12px; border-radius: 4px; color: #1967d2; margin-top: 5px; max-width: 300px;">
+                                        <div style="font-weight: bold; font-size: 14px; margin-bottom: 4px;">📚 ${data.assignmentTitle}</div>
+                                        <a href="${data.text}" target="_blank" style="display: inline-block; background: #1967d2; color: white; padding: 5px 12px; border-radius: 4px; text-decoration: none; font-size: 12px; font-weight: bold;">
+                                            Open in Classroom
+                                        </a>
+                                    </div>`;
+                            }
+                            // 2. Handle Images
+                            else if (checkIsImg(data.text)) {
+                                content = `<img src="${data.text}" style="max-width: 100%; max-height: 300px; border-radius: 8px; display: block; margin-top: 5px;">`;
+                            }
+
+                            const senderName = memberMap[data.userId] || data.user || "Unknown User";
+                            const isSender = data.userId === currentUser.uid;
+                            const isOwner = currentUser.uid === currentServerOwner;
+
+                            const deleteBtn =
+                                isSender || isOwner
+                                    ? `<span class="delete-btn" onclick="deleteMessage('${messageId}')">❌</span>`
+                                    : "";
+
+                            const li = document.createElement("li");
+
+                            // 3. Grouping Logic
+                            if (
+                                lastMsg &&
+                                lastMsg.userId === data.userId &&
+                                createdAt - lastMsg.createdAt?.toDate() < 300000
+                            ) {
+                                li.className = "grouped";
+                                li.innerHTML = `<div>${content} ${deleteBtn}</div>`;
+                            } else {
+                                li.innerHTML = `<span class="msg-user">${senderName}</span><span class="msg-time">${time}</span> ${deleteBtn}<br>${content}`;
+                            }
+
+                            list.appendChild(li);
+                            lastMsg = { ...data, createdAt: data.createdAt }; // Store for next loop
+                        });
+                        list.scrollTop = list.scrollHeight;
+                    });
                 });
             }
 
@@ -843,9 +850,7 @@
                 document.getElementById("msg-input").value = "";
                 await addDoc(collection(db, "messages"), {
                     text: val,
-                    user:
-                        auth.currentUser.displayName ||
-                        auth.currentUser.email.split("@")[0],
+                    userId: auth.currentUser.uid,
                     serverId: currentServerId,
                     createdAt: serverTimestamp(),
                 });
@@ -859,9 +864,7 @@
                 reader.onload = async () => {
                     await addDoc(collection(db, "messages"), {
                         text: reader.result,
-                        user:
-                            auth.currentUser.displayName ||
-                            auth.currentUser.email.split("@")[0],
+                        userId: auth.currentUser.uid,
                         serverId: currentServerId,
                         createdAt: serverTimestamp(),
                     });

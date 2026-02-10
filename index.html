@@ -274,6 +274,18 @@
                 >
                     Delete Server
                 </button>
+                <button
+                    id="reset-code-btn"
+                    onclick="resetInviteCode()"
+                    style="
+                        display: none;
+                        background: #4f545c;
+                        margin-top: 5px;
+                        font-size: 12px;
+                    "
+                >
+                    Reset Invite Code
+                </button>
             </div>
             <div
                 id="member-sidebar"
@@ -547,6 +559,41 @@
                     createdAt: serverTimestamp(),
                 });
             };
+
+            window.resetInviteCode = async () => {
+                // Check if the current user is the owner [cite: 156]
+                if (currentServerOwner !== currentUser.uid) {
+                    return alert(
+                        "Only the server owner can change the invite code.",
+                    );
+                }
+
+                if (
+                    !confirm(
+                        "Are you sure? This will invalidate the old invite code.",
+                    )
+                )
+                    return;
+
+                // Generate a new random code [cite: 113]
+                const newCode = Math.random()
+                    .toString(36)
+                    .substring(2, 7)
+                    .toUpperCase();
+
+                try {
+                    const serverRef = doc(db, "servers", currentServerId);
+                    // Update the inviteCode field in Firestore [cite: 66, 169]
+                    await updateDoc(serverRef, { inviteCode: newCode });
+
+                    // Update the UI display immediately [cite: 149]
+                    document.getElementById("invite-display").innerText =
+                        `CODE: ${newCode}`;
+                    alert("Invite code updated successfully!");
+                } catch (err) {
+                    alert("Error updating code: " + err.message);
+                }
+            };
             // --- SERVERS ---
             window.createServer = async () => {
                 const name = prompt("Server Name:");
@@ -658,6 +705,14 @@
                 const q = query(collection(db, "servers"));
                 const snap = await getDocs(q);
                 const sInfo = snap.docs.find((d) => d.id === id);
+                // Inside window.selectServer = async (id, name) => { ... }
+                const isOwner = sData.owner === currentUser.uid;
+                document.getElementById("delete-btn").style.display = isOwner
+                    ? "block"
+                    : "none";
+                // Add this line:
+                document.getElementById("reset-code-btn").style.display =
+                    isOwner ? "block" : "none";
 
                 // --- NEW: AUTO-SYNC NAME FOR EXISTING USERS ---
                 const memberQuery = query(

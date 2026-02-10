@@ -274,18 +274,6 @@
                 >
                     Delete Server
                 </button>
-                <button
-                    id="reset-code-btn"
-                    onclick="resetInviteCode()"
-                    style="
-                        display: none;
-                        background: #4f545c;
-                        margin-top: 5px;
-                        font-size: 12px;
-                    "
-                >
-                    Reset Invite Code
-                </button>
             </div>
             <div
                 id="member-sidebar"
@@ -389,11 +377,6 @@
             let currentServerId = null;
             let currentServerOwner = null;
             let unsubMessages = null;
-
-            // --- SPAM PROTECTION CONFIG ---
-            const SPAM_THRESHOLD = 15; // Number of messages
-            const SPAM_WINDOW_MS = 3000; // Timeframe (3 seconds)
-            let userMessageLog = []; // Local tracker for current session
 
             // --- PANIC FEATURE (CTRL + K) ---
             document.addEventListener("keydown", (e) => {
@@ -540,42 +523,6 @@
                 });
             }
 
-            // --- RESET INVITE CODE ---
-            window.resetInviteCode = async () => {
-                // Check if the current user is the owner [cite: 156]
-                if (currentServerOwner !== currentUser.uid) {
-                    return alert(
-                        "Only the server owner can change the invite code.",
-                    );
-                }
-
-                if (
-                    !confirm(
-                        "Are you sure? This will invalidate the old invite code.",
-                    )
-                )
-                    return;
-
-                // Generate a new random code [cite: 113]
-                const newCode = Math.random()
-                    .toString(36)
-                    .substring(2, 7)
-                    .toUpperCase();
-
-                try {
-                    const serverRef = doc(db, "servers", currentServerId);
-                    // Update the inviteCode field in Firestore [cite: 66, 169]
-                    await updateDoc(serverRef, { inviteCode: newCode });
-
-                    // Update the UI display immediately [cite: 149]
-                    document.getElementById("invite-display").innerText =
-                        `CODE: ${newCode}`;
-                    alert("Invite code updated successfully!");
-                } catch (err) {
-                    alert("Error updating code: " + err.message);
-                }
-            };
-
             // --- ASSIGNMENT LINK ---
             window.sendAssignmentLink = async () => {
                 const url = prompt(
@@ -704,14 +651,15 @@
                 currentServerId = id;
                 document.getElementById("current-server-name").innerText = name;
                 document.getElementById("msg-input").disabled = false;
-                document.getElementById("msg-input").placeholder = `Message ${name}`;
+                document.getElementById("msg-input").placeholder =
+                    `Message ${name}`;
                 document.getElementById("leave-btn").style.display = "block";
 
                 const q = query(collection(db, "servers"));
                 const snap = await getDocs(q);
                 const sInfo = snap.docs.find((d) => d.id === id);
 
-                // --- AUTO-SYNC NAME FOR EXISTING USERS ---
+                // --- NEW: AUTO-SYNC NAME FOR EXISTING USERS ---
                 const memberQuery = query(
                     collection(db, "members"),
                     where("serverId", "==", id),
@@ -721,8 +669,11 @@
 
                 if (!memberSnap.empty) {
                     const memberDoc = memberSnap.docs[0];
-                    const currentName = currentUser.displayName || currentUser.email.split("@")[0];
+                    const currentName =
+                        currentUser.displayName ||
+                        currentUser.email.split("@")[0];
 
+                    // If the name is missing in the database, add it now
                     if (
                         !memberDoc.data().displayName ||
                         memberDoc.data().displayName !== currentName ||
@@ -734,34 +685,34 @@
                         });
                     }
                 }
+                // ----------------------------------------------
 
-                // --- HANDLE OWNER CONTROLS ---
-                if (sInfo) {
-                    const sData = sInfo.data();
-                    currentServerOwner = sData.owner;
-                    document.getElementById("invite-display").innerText = `CODE: ${sData.inviteCode}`;
-
-                    const isOwner = sData.owner === currentUser.uid;
-                    document.getElementById("delete-btn").style.display = isOwner ? "block" : "none";
-                    document.getElementById("reset-code-btn").style.display = isOwner ? "block" : "none";
-                }
-
-                loadMessages(id);
-                loadMembers(id);
-
-                // --- KICK LISTENER ---
+                // kick listener
                 const kickListenerQ = query(
                     collection(db, "members"),
                     where("serverId", "==", id),
-                    where("userId", "==", currentUser.uid);
+                    where("userId", "==", currentUser.uid),
                 );
+
                 onSnapshot(kickListenerQ, (snap) => {
                     if (snap.empty && currentServerId === id) {
                         alert("You have been kicked from this server.");
-                        location.reload();
+                        location.reload(); // Refreshing clears the state and returns to login/server select
                     }
                 });
-            }; // This single brace now correctly closes the entire function.
+
+                if (sInfo) {
+                    const sData = sInfo.data();
+                    currentServerOwner = sData.owner;
+                    document.getElementById("invite-display").innerText =
+                        `CODE: ${sData.inviteCode}`;
+                    const isOwner = sData.owner === currentUser.uid;
+                    document.getElementById("delete-btn").style.display =
+                        isOwner ? "block" : "none";
+                }
+                loadMessages(id);
+                loadMembers(id);
+            };
 
             window.leaveServer = async () => {
                 if (!currentServerId || !confirm("Leave this server?")) return;
@@ -960,32 +911,6 @@
                 e.preventDefault();
                 const val = document.getElementById("msg-input").value;
                 if (!val || !currentServerId) return;
-
-                // --- SPAM CHECK START ---
-                const now = Date.now();
-                // Filter log to only include messages within the last 3 seconds
-                userMessageLog = userMessageLog.filter(time => now - time < SPAM_WINDOW_MS);
-                userMessageLog.push(now);
-
-                if (userMessageLog.length > SPAM_THRESHOLD) {
-                    alert("You have been auto-kicked for spamming.");
-
-                    // Use existing leaveServer logic to remove user from the current server [cite: 168, 169]
-                    const q = query(
-                        collection(db, "members"),
-                        where("serverId", "==", currentServerId),
-                        where("userId", "==", currentUser.uid),
-                    );
-                    const snap = await getDocs(q);
-                    await Promise.all(
-                        snap.docs.map((d) => deleteDoc(doc(db, "members", d.id))),
-                    );
-
-                    location.reload(); // Force reload to clear state
-                    return;
-                }
-                // --- SPAM CHECK END ---
-
                 document.getElementById("msg-input").value = "";
                 await addDoc(collection(db, "messages"), {
                     text: val,

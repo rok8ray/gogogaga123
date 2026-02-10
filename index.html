@@ -702,58 +702,58 @@
 
             window.selectServer = async (id, name) => {
                 currentServerId = id;
-                document.getElementById("current-server-name").innerText = name; [cite: 149]
-                document.getElementById("msg-input").disabled = false; [cite: 149]
-                document.getElementById("msg-input").placeholder = `Message ${name}`; [cite: 149]
-                document.getElementById("leave-btn").style.display = "block"; [cite: 149]
+                document.getElementById("current-server-name").innerText = name;
+                document.getElementById("msg-input").disabled = false;
+                document.getElementById("msg-input").placeholder = `Message ${name}`;
+                document.getElementById("leave-btn").style.display = "block";
 
-                const q = query(collection(db, "servers")); [cite: 149]
-                const snap = await getDocs(q); [cite: 150]
-                const sInfo = snap.docs.find((d) => d.id === id); [cite: 150]
+                const q = query(collection(db, "servers"));
+                const snap = await getDocs(q);
+                const sInfo = snap.docs.find((d) => d.id === id);
 
                 // --- AUTO-SYNC NAME FOR EXISTING USERS ---
                 const memberQuery = query(
                     collection(db, "members"),
                     where("serverId", "==", id),
-                    where("userId", "==", currentUser.uid), [cite: 151, 152]
+                    where("userId", "==", currentUser.uid),
                 );
-                const memberSnap = await getDocs(memberQuery); [cite: 153]
+                const memberSnap = await getDocs(memberQuery);
 
                 if (!memberSnap.empty) {
-                    const memberDoc = memberSnap.docs[0]; [cite: 153]
-                    const currentName = currentUser.displayName || currentUser.email.split("@")[0]; [cite: 154]
+                    const memberDoc = memberSnap.docs[0];
+                    const currentName = currentUser.displayName || currentUser.email.split("@")[0];
 
                     if (
                         !memberDoc.data().displayName ||
                         memberDoc.data().displayName !== currentName ||
-                        !memberDoc.data().userEmail [cite: 154, 155]
+                        !memberDoc.data().userEmail
                     ) {
                         await updateDoc(doc(db, "members", memberDoc.id), {
                             displayName: currentName,
-                            userEmail: currentUser.email, [cite: 155, 156]
+                            userEmail: currentUser.email,
                         });
                     }
                 }
 
                 // --- HANDLE OWNER CONTROLS ---
                 if (sInfo) {
-                    const sData = sInfo.data(); [cite: 157]
-                    currentServerOwner = sData.owner; [cite: 158]
-                    document.getElementById("invite-display").innerText = `CODE: ${sData.inviteCode}`; [cite: 158]
+                    const sData = sInfo.data();
+                    currentServerOwner = sData.owner;
+                    document.getElementById("invite-display").innerText = `CODE: ${sData.inviteCode}`;
 
-                    const isOwner = sData.owner === currentUser.uid; [cite: 158]
-                    document.getElementById("delete-btn").style.display = isOwner ? "block" : "none"; [cite: 159, 160]
-                    document.getElementById("reset-code-btn").style.display = isOwner ? "block" : "none"; [cite: 160]
+                    const isOwner = sData.owner === currentUser.uid;
+                    document.getElementById("delete-btn").style.display = isOwner ? "block" : "none";
+                    document.getElementById("reset-code-btn").style.display = isOwner ? "block" : "none";
                 }
 
-                loadMessages(id); [cite: 161]
-                loadMembers(id); [cite: 162]
+                loadMessages(id);
+                loadMembers(id);
 
                 // --- KICK LISTENER ---
                 const kickListenerQ = query(
                     collection(db, "members"),
                     where("serverId", "==", id),
-                    where("userId", "==", currentUser.uid), [cite: 162, 163]
+                    where("userId", "==", currentUser.uid);
                 );
                 onSnapshot(kickListenerQ, (snap) => {
                     if (snap.empty && currentServerId === id) {

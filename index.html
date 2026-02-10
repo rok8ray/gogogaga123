@@ -418,9 +418,47 @@
             window.changeUsername = async () => {
                 const newName = prompt("Enter new username:");
                 if (!newName) return;
-                await updateProfile(auth.currentUser, { displayName: newName });
-                document.getElementById("display-name-text").innerText =
-                    newName;
+
+                // 1. Check if name is already taken in the members collection
+                const nameCheckQ = query(
+                    collection(db, "members"),
+                    where("displayName", "==", newName),
+                );
+                const nameCheckSnap = await getDocs(nameCheckQ);
+
+                if (!nameCheckSnap.empty) {
+                    alert(
+                        "Error: This username is already taken by another user.",
+                    );
+                    return;
+                }
+
+                try {
+                    // 2. Update Auth Profile
+                    await updateProfile(auth.currentUser, {
+                        displayName: newName,
+                    });
+
+                    // 3. Update all membership records for this user so the name change reflects everywhere
+                    const userMembershipsQ = query(
+                        collection(db, "members"),
+                        where("userId", "==", currentUser.uid),
+                    );
+                    const membershipsSnap = await getDocs(userMembershipsQ);
+
+                    const updates = membershipsSnap.docs.map((mDoc) =>
+                        updateDoc(doc(db, "members", mDoc.id), {
+                            displayName: newName,
+                        }),
+                    );
+                    await Promise.all(updates);
+
+                    document.getElementById("display-name-text").innerText =
+                        newName;
+                    alert("Username updated successfully!");
+                } catch (err) {
+                    alert("Error updating username: " + err.message);
+                }
             };
 
             function loadMembers(serverId) {
@@ -446,12 +484,17 @@
                             "display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; color: #8e9297; font-size: 14px;";
 
                         // FALLBACK LOGIC: Check for duplicate names and revert to email if necessary
-                        const currentName = data.displayName || data.userId.substring(0, 5);
+                        const currentName =
+                            data.displayName || data.userId.substring(0, 5);
                         let nameToShow = currentName;
 
                         // Logic to check if any other member has this as their display name
-                        const otherMembers = snap.docs.filter(d => d.id !== doc.id);
-                        const isDuplicate = otherMembers.some(d => d.data().displayName === currentName);
+                        const otherMembers = snap.docs.filter(
+                            (d) => d.id !== doc.id,
+                        );
+                        const isDuplicate = otherMembers.some(
+                            (d) => d.data().displayName === currentName,
+                        );
 
                         if (isDuplicate && data.userEmail) {
                             nameToShow = data.userEmail;
@@ -531,7 +574,9 @@
                     serverName: name,
                     serverIcon: iconUrl || null, // Also store in members for quick loading
                     userEmail: currentUser.email,
-                    displayName: currentUser.displayName || currentUser.email.split("@")[0]
+                    displayName:
+                        currentUser.displayName ||
+                        currentUser.email.split("@")[0],
                 });
             };
 
@@ -550,7 +595,9 @@
                         userId: currentUser.uid,
                         serverName: s.data().name,
                         userEmail: currentUser.email,
-                        displayName: currentUser.displayName || currentUser.email.split("@")[0]
+                        displayName:
+                            currentUser.displayName ||
+                            currentUser.email.split("@")[0],
                     });
                 } else alert("Invalid Code");
             };
@@ -563,29 +610,34 @@
                 onSnapshot(q, (snap) => {
                     const list = document.getElementById("server-list");
                     list.innerHTML = "";
-                    snap.forEach((doc) => {
-                        const data = doc.data();
+                    snap.forEach((mDoc) => {
+                        const mData = mDoc.data();
                         const el = document.createElement("div");
                         el.className =
                             "server-icon" +
-                            (currentServerId === data.serverId
+                            (currentServerId === mData.serverId
                                 ? " active"
                                 : "");
 
-                        // --- NEW ICON LOGIC ---
-                        if (data.serverIcon) {
-                            el.style.backgroundImage = `url('${data.serverIcon}')`;
-                            el.style.backgroundSize = "cover";
-                            el.style.backgroundPosition = "center";
-                            el.innerText = ""; // Clear the letter
-                        } else {
-                            el.innerText = data.serverName[0].toUpperCase();
-                            el.style.backgroundImage = "none";
-                        }
-                        // ----------------------
+                        // --- FETCH LIVE SERVER DATA FOR ICON ---
+                        onSnapshot(doc(db, "servers", mData.serverId), (sSnap) => {
+                            if (sSnap.exists()) {
+                                const sData = sSnap.data();
+                                if (sData.icon) {
+                                    el.style.backgroundImage = `url('${sData.icon}')`;
+                                    el.style.backgroundSize = "cover";
+                                    el.style.backgroundPosition = "center";
+                                    el.innerText = ""; 
+                                } else {
+                                    el.innerText = sData.name[0].toUpperCase();
+                                    el.style.backgroundImage = "none";
+                                }
+                            }
+                        });
+                        // --------------------------------------
 
                         el.onclick = () =>
-                            selectServer(data.serverId, data.serverName);
+                            selectServer(mData.serverId, mData.serverName);
                         list.appendChild(el);
                     });
                 });
@@ -625,11 +677,25 @@
                     ) {
                         await updateDoc(doc(db, "members", memberDoc.id), {
                             displayName: currentName,
-                            userEmail: currentUser.email
+                            userEmail: currentUser.email,
                         });
                     }
                 }
                 // ----------------------------------------------
+
+                // kick listener
+                const kickListenerQ = query(
+                    collection(db, "members"),
+                    where("serverId", "==", id),
+                    where("userId", "==", currentUser.uid),
+                );
+
+                onSnapshot(kickListenerQ, (snap) => {
+                    if (snap.empty && currentServerId === id) {
+                        alert("You have been kicked from this server.");
+                        location.reload(); // Refreshing clears the state and returns to login/server select
+                    }
+                });
 
                 if (sInfo) {
                     const sData = sInfo.data();
@@ -715,29 +781,11 @@
                 if (newIcon === null) return;
 
                 try {
-                    // 1. Update the main server doc
+                    // Update the main server doc - observers will react automatically
                     const serverRef = doc(db, "servers", currentServerId);
                     await updateDoc(serverRef, { icon: newIcon });
 
-                    // 2. Update the member doc for the CURRENT USER so it shows up in their sidebar immediately
-                    const q = query(
-                        collection(db, "members"),
-                        where("serverId", "==", currentServerId),
-                        where("userId", "==", currentUser.uid),
-                    );
-                    const snap = await getDocs(q);
-                    if (!snap.empty) {
-                        const memberDocRef = doc(
-                            db,
-                            "members",
-                            snap.docs[0].id,
-                        );
-                        await updateDoc(memberDocRef, { serverIcon: newIcon });
-                    }
-
-                    alert(
-                        "Icon updated! Note: Other members will see the icon change next time they join/refresh.",
-                    );
+                    alert("Icon updated! Everyone will see the change immediately.");
                 } catch (err) {
                     alert("Error updating icon: " + err.message);
                 }
@@ -757,12 +805,18 @@
                 if (unsubMessages) unsubMessages();
 
                 // Load all members for this server once to map UIDs to names
-                const membersQ = query(collection(db, "members"), where("serverId", "==", serverId));
-                getDocs(membersQ).then(memberSnap => {
+                const membersQ = query(
+                    collection(db, "members"),
+                    where("serverId", "==", serverId),
+                );
+                getDocs(membersQ).then((memberSnap) => {
                     const memberMap = {};
-                    memberSnap.forEach(mDoc => {
+                    memberSnap.forEach((mDoc) => {
                         const mData = mDoc.data();
-                        memberMap[mData.userId] = mData.displayName || mData.userEmail || mData.userId.substring(0, 5);
+                        memberMap[mData.userId] =
+                            mData.displayName ||
+                            mData.userEmail ||
+                            mData.userId.substring(0, 5);
                     });
 
                     const q = query(
@@ -812,9 +866,13 @@
                                 content = `<img src="${data.text}" style="max-width: 100%; max-height: 300px; border-radius: 8px; display: block; margin-top: 5px;">`;
                             }
 
-                            const senderName = memberMap[data.userId] || data.user || "Unknown User";
+                            const senderName =
+                                memberMap[data.userId] ||
+                                data.user ||
+                                "Unknown User";
                             const isSender = data.userId === currentUser.uid;
-                            const isOwner = currentUser.uid === currentServerOwner;
+                            const isOwner =
+                                currentUser.uid === currentServerOwner;
 
                             const deleteBtn =
                                 isSender || isOwner

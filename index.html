@@ -274,6 +274,18 @@
                 >
                     Delete Server
                 </button>
+                <button
+                    id="reset-code-btn"
+                    onclick="resetInviteCode()"
+                    style="
+                        display: none;
+                        background: #4f545c;
+                        margin-top: 5px;
+                        font-size: 12px;
+                    "
+                >
+                    Reset Invite Code
+                </button>
             </div>
             <div
                 id="member-sidebar"
@@ -523,6 +535,42 @@
                 });
             }
 
+            // --- RESET INVITE CODE ---
+            window.resetInviteCode = async () => {
+                // Check if the current user is the owner [cite: 156]
+                if (currentServerOwner !== currentUser.uid) {
+                    return alert(
+                        "Only the server owner can change the invite code.",
+                    );
+                }
+
+                if (
+                    !confirm(
+                        "Are you sure? This will invalidate the old invite code.",
+                    )
+                )
+                    return;
+
+                // Generate a new random code [cite: 113]
+                const newCode = Math.random()
+                    .toString(36)
+                    .substring(2, 7)
+                    .toUpperCase();
+
+                try {
+                    const serverRef = doc(db, "servers", currentServerId);
+                    // Update the inviteCode field in Firestore [cite: 66, 169]
+                    await updateDoc(serverRef, { inviteCode: newCode });
+
+                    // Update the UI display immediately [cite: 149]
+                    document.getElementById("invite-display").innerText =
+                        `CODE: ${newCode}`;
+                    alert("Invite code updated successfully!");
+                } catch (err) {
+                    alert("Error updating code: " + err.message);
+                }
+            };
+
             // --- ASSIGNMENT LINK ---
             window.sendAssignmentLink = async () => {
                 const url = prompt(
@@ -647,44 +695,57 @@
                 });
             }
 
-            window.selectServer = async (id, name) => {
-                currentServerId = id;
-                document.getElementById("current-server-name").innerText = name;
-                document.getElementById("msg-input").disabled = false;
-                document.getElementById("msg-input").placeholder =
-                    `Message ${name}`;
-                document.getElementById("leave-btn").style.display = "block";
+                window.selectServer = async (id, name) => {
+                    currentServerId = id;
+                    document.getElementById("current-server-name").innerText = name;
+                    document.getElementById("msg-input").disabled = false;
+                    document.getElementById("msg-input").placeholder = `Message ${name}`;
+                    document.getElementById("leave-btn").style.display = "block";
 
-                const q = query(collection(db, "servers"));
-                const snap = await getDocs(q);
-                const sInfo = snap.docs.find((d) => d.id === id);
+                    const q = query(collection(db, "servers"));
+                    const snap = await getDocs(q);
+                    const sInfo = snap.docs.find((d) => d.id === id);
 
-                // --- NEW: AUTO-SYNC NAME FOR EXISTING USERS ---
-                const memberQuery = query(
-                    collection(db, "members"),
-                    where("serverId", "==", id),
-                    where("userId", "==", currentUser.uid),
-                );
-                const memberSnap = await getDocs(memberQuery);
+                    // --- NEW: AUTO-SYNC NAME FOR EXISTING USERS ---
+                    const memberQuery = query(
+                        collection(db, "members"),
+                        where("serverId", "==", id),
+                        where("userId", "==", currentUser.uid),
+                    );
+                    const memberSnap = await getDocs(memberQuery);
 
-                if (!memberSnap.empty) {
-                    const memberDoc = memberSnap.docs[0];
-                    const currentName =
-                        currentUser.displayName ||
-                        currentUser.email.split("@")[0];
+                    if (!memberSnap.empty) {
+                        const memberDoc = memberSnap.docs[0];
+                        const currentName = currentUser.displayName || currentUser.email.split("@")[0];
 
-                    // If the name is missing in the database, add it now
-                    if (
-                        !memberDoc.data().displayName ||
-                        memberDoc.data().displayName !== currentName ||
-                        !memberDoc.data().userEmail
-                    ) {
-                        await updateDoc(doc(db, "members", memberDoc.id), {
-                            displayName: currentName,
-                            userEmail: currentUser.email,
-                        });
+                        if (
+                            !memberDoc.data().displayName ||
+                            memberDoc.data().displayName !== currentName ||
+                            !memberDoc.data().userEmail
+                        ) {
+                            await updateDoc(doc(db, "members", memberDoc.id), {
+                                displayName: currentName,
+                                userEmail: currentUser.email,
+                            });
+                        }
                     }
-                }
+
+                    // --- HANDLE OWNER CONTROLS ---
+                    if (sInfo) {
+                        const sData = sInfo.data();
+                        currentServerOwner = sData.owner;
+                        document.getElementById("invite-display").innerText = `CODE: ${sData.inviteCode}`;
+
+                        const isOwner = sData.owner === currentUser.uid;
+
+                        // Show/Hide owner-only buttons
+                        document.getElementById("delete-btn").style.display = isOwner ? "block" : "none";
+                        document.getElementById("reset-code-btn").style.display = isOwner ? "block" : "none";
+                    }
+
+                    loadMessages(id);
+                    loadMembers(id);
+                };
                 // ----------------------------------------------
 
                 // kick listener

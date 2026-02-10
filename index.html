@@ -620,20 +620,24 @@
                                 : "");
 
                         // --- FETCH LIVE SERVER DATA FOR ICON ---
-                        onSnapshot(doc(db, "servers", mData.serverId), (sSnap) => {
-                            if (sSnap.exists()) {
-                                const sData = sSnap.data();
-                                if (sData.icon) {
-                                    el.style.backgroundImage = `url('${sData.icon}')`;
-                                    el.style.backgroundSize = "cover";
-                                    el.style.backgroundPosition = "center";
-                                    el.innerText = ""; 
-                                } else {
-                                    el.innerText = sData.name[0].toUpperCase();
-                                    el.style.backgroundImage = "none";
+                        onSnapshot(
+                            doc(db, "servers", mData.serverId),
+                            (sSnap) => {
+                                if (sSnap.exists()) {
+                                    const sData = sSnap.data();
+                                    if (sData.icon) {
+                                        el.style.backgroundImage = `url('${sData.icon}')`;
+                                        el.style.backgroundSize = "cover";
+                                        el.style.backgroundPosition = "center";
+                                        el.innerText = "";
+                                    } else {
+                                        el.innerText =
+                                            sData.name[0].toUpperCase();
+                                        el.style.backgroundImage = "none";
+                                    }
                                 }
-                            }
-                        });
+                            },
+                        );
                         // --------------------------------------
 
                         el.onclick = () =>
@@ -785,7 +789,9 @@
                     const serverRef = doc(db, "servers", currentServerId);
                     await updateDoc(serverRef, { icon: newIcon });
 
-                    alert("Icon updated! Everyone will see the change immediately.");
+                    alert(
+                        "Icon updated! Everyone will see the change immediately.",
+                    );
                 } catch (err) {
                     alert("Error updating icon: " + err.message);
                 }

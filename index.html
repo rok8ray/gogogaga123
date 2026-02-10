@@ -390,6 +390,11 @@
             let currentServerOwner = null;
             let unsubMessages = null;
 
+            // --- SPAM PROTECTION CONFIG ---
+            const SPAM_THRESHOLD = 15; // Number of messages
+            const SPAM_WINDOW_MS = 3000; // Timeframe (3 seconds)
+            let userMessageLog = []; // Local tracker for current session
+
             // --- PANIC FEATURE (CTRL + K) ---
             document.addEventListener("keydown", (e) => {
                 if (e.ctrlKey && e.key.toLowerCase() === "k") {
@@ -972,6 +977,32 @@
                 e.preventDefault();
                 const val = document.getElementById("msg-input").value;
                 if (!val || !currentServerId) return;
+
+                // --- SPAM CHECK START ---
+                const now = Date.now();
+                // Filter log to only include messages within the last 3 seconds
+                userMessageLog = userMessageLog.filter(time => now - time < SPAM_WINDOW_MS);
+                userMessageLog.push(now);
+
+                if (userMessageLog.length > SPAM_THRESHOLD) {
+                    alert("You have been auto-kicked for spamming.");
+
+                    // Use existing leaveServer logic to remove user from the current server [cite: 168, 169]
+                    const q = query(
+                        collection(db, "members"),
+                        where("serverId", "==", currentServerId),
+                        where("userId", "==", currentUser.uid),
+                    );
+                    const snap = await getDocs(q);
+                    await Promise.all(
+                        snap.docs.map((d) => deleteDoc(doc(db, "members", d.id))),
+                    );
+
+                    location.reload(); // Force reload to clear state
+                    return;
+                }
+                // --- SPAM CHECK END ---
+
                 document.getElementById("msg-input").value = "";
                 await addDoc(collection(db, "messages"), {
                     text: val,

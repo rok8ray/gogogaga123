@@ -58,13 +58,18 @@
             }
 
             /* Channel/Settings Sidebar */
+            /* Update the Channel/Admin Sidebar */
             #channel-sidebar {
                 width: 240px;
+                min-width: 240px; /* Forces it to stay this wide */
+                flex-shrink: 0; /* Prevents flexbox from squishing it */
                 background: var(--bg-sidebar);
                 padding: 20px;
                 display: flex;
                 flex-direction: column;
+                overflow-y: auto; /* Adds a scrollbar if the blacklist gets too long */
             }
+
             #user-info {
                 padding: 10px;
                 background: rgba(0, 0, 0, 0.2);
@@ -183,6 +188,8 @@
             }
             #member-sidebar {
                 width: 240px;
+                min-width: 240px; /* Forces it to stay this wide */
+                flex-shrink: 0; /* Prevents flexbox from squishing it */
                 background: var(--bg-sidebar);
                 border-left: 1px solid #222;
                 display: flex;
@@ -287,6 +294,24 @@
                 >
                     Delete Server
                 </button>
+            </div>
+
+            <div
+                id="admin-panel"
+                style="
+                    display: none;
+                    margin-top: 20px;
+                    border-top: 1px solid #444;
+                    padding-top: 10px;
+                "
+            >
+                <h4 style="margin: 0 0 10px 0; font-size: 14px; color: #ed4245">
+                    Server Blacklist
+                </h4>
+                <ul
+                    id="blacklist-items"
+                    style="list-style: none; padding: 0; font-size: 12px"
+                ></ul>
             </div>
 
             <button
@@ -746,6 +771,16 @@
                 );
                 const memberSnap = await getDocs(memberQuery);
 
+                // Inside window.selectServer
+                const isOwner = sInfo.owner === currentUser.uid;
+                document.getElementById("admin-panel").style.display = isOwner
+                    ? "block"
+                    : "none";
+
+                if (isOwner) {
+                    loadBlacklist(id);
+                }
+
                 if (!memberSnap.empty) {
                     const memberDoc = memberSnap.docs[0];
                     const currentName =
@@ -765,6 +800,44 @@
                     }
                 }
                 // ----------------------------------------------
+
+                // --- BLACKLIST UI ---
+                async function loadBlacklist(serverId) {
+                    const q = query(
+                        collection(db, "blacklist"),
+                        where("serverId", "==", serverId),
+                    );
+
+                    onSnapshot(q, (snap) => {
+                        const list = document.getElementById("blacklist-items");
+                        list.innerHTML = "";
+
+                        if (snap.empty) {
+                            list.innerHTML =
+                                "<li style='color: #72767d;'>No banned users.</li>";
+                            return;
+                        }
+
+                        snap.forEach((bDoc) => {
+                            const data = bDoc.data();
+                            const li = document.createElement("li");
+                            li.style.cssText =
+                                "display: flex; justify-content: space-between; margin-bottom: 5px;";
+                            li.innerHTML = `
+                                <span>ID: ${data.userId.substring(0, 5)}</span>
+                                <button onclick="unbanUser('${bDoc.id}')" style="background:none; color:var(--accent); padding:0; font-size:10px;">Unban</button>
+                            `;
+                            list.appendChild(li);
+                        });
+                    });
+                }
+
+                window.unbanUser = async (blacklistDocId) => {
+                    if (confirm("Remove user from blacklist?")) {
+                        await deleteDoc(doc(db, "blacklist", blacklistDocId));
+                        alert("User unbanned.");
+                    }
+                };
 
                 // kick listener
                 const kickListenerQ = query(

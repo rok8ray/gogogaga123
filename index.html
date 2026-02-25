@@ -181,6 +181,19 @@
                 background: #202225;
                 color: white;
             }
+            #member-sidebar {
+                width: 240px;
+                background: var(--bg-sidebar);
+                border-left: 1px solid #222;
+                display: flex;
+                flex-direction: column;
+                padding: 20px;
+            }
+
+            /* Optional: Toggle class for mobile/small screens */
+            .hidden {
+                display: none !important;
+            }
         </style>
     </head>
     <body>
@@ -275,18 +288,6 @@
                     Delete Server
                 </button>
             </div>
-            <div
-                id="member-sidebar"
-                style="
-                    width: 200px;
-                    background: var(--bg-sidebar);
-                    padding: 20px;
-                    border-left: 1px solid #222;
-                "
-            >
-                <h3>Members</h3>
-                <ul id="member-list" style="list-style: none; padding: 0"></ul>
-            </div>
 
             <button
                 onclick="logout()"
@@ -297,6 +298,21 @@
         </div>
 
         <div id="chat-container">
+            <div
+                style="
+                    padding: 10px;
+                    border-bottom: 1px solid #222;
+                    display: flex;
+                    justify-content: flex-end;
+                "
+            >
+                <button
+                    onclick="toggleMembers()"
+                    style="background: #4f545c; padding: 5px 10px"
+                >
+                    👥 Members
+                </button>
+            </div>
             <ul id="messages"></ul>
             <form id="input-area">
                 <input
@@ -326,6 +342,11 @@
                     📷
                 </button>
             </form>
+        </div>
+
+        <div id="member-sidebar">
+            <h3>Members</h3>
+            <ul id="member-list"></ul>
         </div>
 
         <script>
@@ -401,9 +422,24 @@
 
             window.logout = () => signOut(auth);
 
-            onAuthStateChanged(auth, (user) => {
+            onAuthStateChanged(auth, async (user) => {
+                // Added async here
                 if (user) {
                     currentUser = user;
+
+                    // Update user status to online in the database
+                    const q = query(
+                        collection(db, "members"),
+                        where("userId", "==", user.uid),
+                    );
+                    const snap = await getDocs(q);
+                    const updates = snap.docs.map((mDoc) =>
+                        updateDoc(doc(db, "members", mDoc.id), {
+                            status: "online",
+                        }),
+                    );
+                    await Promise.all(updates);
+
                     document.getElementById("auth-overlay").style.display =
                         "none";
                     document.getElementById("display-name-text").innerText =
@@ -474,21 +510,30 @@
                     snap.forEach((doc) => {
                         const data = doc.data();
                         const li = document.createElement("li");
-                        li.style.marginBottom = "10px";
-                        li.style.display = "flex";
-                        li.style.justifyContent = "space-between";
-                        li.style.alignItems = "center";
 
-                        // Style it to look like a chat member list
-                        li.style.cssText =
-                            "display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; color: #8e9297; font-size: 14px;";
+                        // --- UI Styling ---
+                        li.style.cssText = `
+                            display: flex;
+                            justify-content: space-between;
+                            align-items: center;
+                            margin-bottom: 12px;
+                            color: #dcddde;
+                            font-size: 14px;
+                            padding: 4px 8px;
+                            border-radius: 4px;
+                        `;
 
-                        // FALLBACK LOGIC: Check for duplicate names and revert to email if necessary
+                        // --- Online Status Logic ---
+                        // We use a green color for 'online' and a grey color for anything else (offline)
+                        const statusColor =
+                            data.status === "online" ? "#3ba55c" : "#747f8d";
+
+                        // --- Name & Role Logic ---
                         const currentName =
                             data.displayName || data.userId.substring(0, 5);
                         let nameToShow = currentName;
 
-                        // Logic to check if any other member has this as their display name
+                        // Check for duplicate names to prevent impersonation
                         const otherMembers = snap.docs.filter(
                             (d) => d.id !== doc.id,
                         );
@@ -502,18 +547,35 @@
 
                         const isOwner = data.userId === currentServerOwner;
 
-                        li.innerHTML = `<span>${isOwner ? "👑 " : ""}${nameToShow}</span>`;
+                        // --- Constructing the HTML ---
+                        li.innerHTML = `
+                            <div style="display: flex; align-items: center; gap: 10px;">
+                                <div style="
+                                    width: 10px;
+                                    height: 10px;
+                                    background-color: ${statusColor};
+                                    border-radius: 50%;
+                                    flex-shrink: 0;
+                                    box-shadow: 0 0 2px rgba(0,0,0,0.5);
+                                "></div>
+                                <span style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 140px;">
+                                    ${isOwner ? '<span title="Owner" style="color: #faa61a; margin-right: 4px;">👑</span>' : ""}
+                                    ${nameToShow}
+                                </span>
+                            </div>
+                        `;
 
-                        // If current user is owner, show kick button next to others
+                        // --- Kick Button Logic (for Blacklisting) ---
                         if (
                             currentUser.uid === currentServerOwner &&
                             data.userId !== currentUser.uid
                         ) {
                             const btn = document.createElement("button");
                             btn.innerText = "Kick";
-                            btn.style.padding = "2px 5px";
-                            btn.style.fontSize = "10px";
                             btn.className = "btn-danger";
+                            btn.style.cssText =
+                                "padding: 2px 6px; font-size: 10px; margin-left: 10px;";
+                            // This triggers the blacklist logic we discussed previously
                             btn.onclick = () => kickMember(data.userId);
                             li.appendChild(btn);
                         }
@@ -522,6 +584,12 @@
                     });
                 });
             }
+
+            // --- MEMBER SIDEBAR TOGGLE ---
+            window.toggleMembers = () => {
+                const sidebar = document.getElementById("member-sidebar");
+                sidebar.classList.toggle("hidden");
+            };
 
             // --- ASSIGNMENT LINK ---
             window.sendAssignmentLink = async () => {
@@ -589,6 +657,17 @@
                 );
                 const snap = await getDocs(q);
                 if (!snap.empty) {
+                    const blackCheck = query(
+                        collection(db, "blacklist"),
+                        where("serverId", "==", s.id),
+                        where("userId", "==", currentUser.uid),
+                    );
+                    const blackSnap = await getDocs(blackCheck);
+
+                    if (!blackSnap.empty) {
+                        alert("You are blacklisted from this server.");
+                        return;
+                    }
                     const s = snap.docs[0];
                     await addDoc(collection(db, "members"), {
                         serverId: s.id,
@@ -771,6 +850,30 @@
                     }
                 } catch (err) {
                     alert("Error kicking member: " + err.message);
+                }
+                if (!confirm("Kick and blacklist this member?")) return;
+
+                try {
+                    // 1. Add to blacklist
+                    await addDoc(collection(db, "blacklist"), {
+                        serverId: currentServerId,
+                        userId: targetUserId,
+                        bannedAt: serverTimestamp(),
+                    });
+
+                    // 2. Remove membership (existing logic)
+                    const q = query(
+                        collection(db, "members"),
+                        where("serverId", "==", currentServerId),
+                        where("userId", "==", targetUserId),
+                    );
+                    const snap = await getDocs(q);
+                    if (!snap.empty)
+                        await deleteDoc(doc(db, "members", snap.docs[0].id));
+
+                    alert("Member blacklisted.");
+                } catch (err) {
+                    alert(err.message);
                 }
             };
 

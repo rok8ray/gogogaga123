@@ -208,6 +208,29 @@
             a {
                 color: #507fa7;
             }
+            #mention-suggestions {
+                position: absolute;
+                bottom: 70px; /* Position it above the input area */
+                left: 20px;
+                background: #2f3136;
+                border: 1px solid #222;
+                border-radius: 4px;
+                box-shadow: 0 4px 15px rgba(0, 0, 0, 0.5);
+                z-index: 100;
+                max-height: 150px;
+                overflow-y: auto;
+                width: 200px;
+            }
+            .mention-item {
+                padding: 8px 12px;
+                cursor: pointer;
+                font-size: 13px;
+                color: #dcddde;
+            }
+            .mention-item:hover {
+                background: #5865f2;
+                color: white;
+            }
         </style>
     </head>
     <body>
@@ -346,6 +369,7 @@
                 </button>
             </div>
             <ul id="messages"></ul>
+            <div id="mention-suggestions" class="hidden"></div>
             <form id="input-area">
                 <input
                     id="msg-input"
@@ -557,8 +581,15 @@
 
                         // --- Online Status Logic ---
                         // We use a green color for 'online' and a grey color for anything else (offline)
-                        const statusColor =
-                            data.status === "online" ? "#3ba55c" : "#747f8d";
+                        // --- Updated Online/Idle Status Logic ---
+                        let statusColor;
+                        if (data.status === "online") {
+                            statusColor = "#3ba55c"; // Green
+                        } else if (data.status === "idle") {
+                            statusColor = "#faa61a"; // Orange/Yellow (Discord style)
+                        } else {
+                            statusColor = "#747f8d"; // Grey (Offline)
+                        }
 
                         // --- Name & Role Logic ---
                         const currentName =
@@ -758,6 +789,33 @@
                 });
             }
 
+            // --- IDLE / VISIBILITY TRACKING ---
+            document.addEventListener("visibilitychange", async () => {
+                if (!currentUser || !currentServerId) return;
+
+                // Determine status based on if the tab is visible or hidden
+                const newStatus =
+                    document.visibilityState === "visible" ? "online" : "idle";
+
+                try {
+                    // Find all membership records for this user to update their status
+                    const q = query(
+                        collection(db, "members"),
+                        where("userId", "==", currentUser.uid),
+                    );
+                    const snap = await getDocs(q);
+
+                    const updates = snap.docs.map((mDoc) =>
+                        updateDoc(doc(db, "members", mDoc.id), {
+                            status: newStatus,
+                        }),
+                    );
+                    await Promise.all(updates);
+                } catch (err) {
+                    console.error("Error updating visibility status:", err);
+                }
+            });
+
             window.selectServer = async (id, name) => {
                 currentServerId = id;
                 document.getElementById("current-server-name").innerText = name;
@@ -807,6 +865,75 @@
                     }
                 }
                 // ----------------------------------------------
+
+                // --- MENTION STUFF ---
+                const msgInput = document.getElementById("msg-input");
+                const suggestionBox = document.getElementById(
+                    "mention-suggestions",
+                );
+
+                msgInput.addEventListener("input", () => {
+                    const value = msgInput.value;
+                    const lastAtPos = value.lastIndexOf("@");
+
+                    // Show suggestions only if @ is the last thing typed or being typed
+                    if (
+                        lastAtPos !== -1 &&
+                        (lastAtPos === 0 || value[lastAtPos - 1] === " ")
+                    ) {
+                        const query = value
+                            .substring(lastAtPos + 1)
+                            .toLowerCase();
+                        showMentionSuggestions(query, lastAtPos);
+                    } else {
+                        suggestionBox.classList.add("hidden");
+                    }
+                });
+
+                async function showMentionSuggestions(query, atPos) {
+                    // Get all members from the current server
+                    const membersList = document.querySelectorAll(
+                        "#member-list li span",
+                    );
+                    const members = Array.from(membersList).map((span) =>
+                        span.innerText.replace("荘", "").trim(),
+                    );
+
+                    const filtered = members.filter((name) =>
+                        name.toLowerCase().includes(query),
+                    );
+
+                    if (filtered.length > 0) {
+                        suggestionBox.innerHTML = "";
+                        filtered.forEach((name) => {
+                            const div = document.createElement("div");
+                            div.className = "mention-item";
+                            div.innerText = name;
+                            div.onclick = () => {
+                                const before = msgInput.value.substring(
+                                    0,
+                                    atPos,
+                                );
+                                const after = msgInput.value.substring(
+                                    msgInput.selectionStart,
+                                );
+                                msgInput.value = `${before}@${name} ${after}`;
+                                suggestionBox.classList.add("hidden");
+                                msgInput.focus();
+                            };
+                            suggestionBox.appendChild(div);
+                        });
+                        suggestionBox.classList.remove("hidden");
+                    } else {
+                        suggestionBox.classList.add("hidden");
+                    }
+                }
+
+                // Close list if user clicks away
+                document.addEventListener("click", (e) => {
+                    if (e.target !== msgInput)
+                        suggestionBox.classList.add("hidden");
+                });
 
                 // --- BLACKLIST UI ---
                 async function loadBlacklist(serverId) {
@@ -1038,7 +1165,38 @@
                                   })
                                 : "...";
 
+                            // --- NEW PROCESSING LOGIC ---
                             let content = data.text;
+
+                            // 1. Link Detector: Converts standard URLs into clickable links
+                            const urlRegex = /(https?:\/\/[^\s]+)/g;
+                            content = content.replace(urlRegex, (url) => {
+                                return `<a href="${url}" target="_blank" rel="noopener noreferrer">${url}</a>`;
+                            });
+
+                            // 2. Username Mention: Checks for @name and highlights it if the user exists
+                            const mentionRegex = /@(\S+)/g;
+
+                            content = content.replace(
+                                mentionRegex,
+                                (match, username) => {
+                                    // We remove the '@' to check the name against our member list
+                                    const cleanName = username.toLowerCase();
+
+                                    const exists = Object.values(
+                                        memberMap,
+                                    ).some(
+                                        (name) =>
+                                            name.toLowerCase() === cleanName,
+                                    );
+
+                                    if (exists) {
+                                        return `<span style="background: rgba(88, 101, 242, 0.3); color: #dee0fc; padding: 0 4px; border-radius: 3px; font-weight: 500;">${match}</span>`;
+                                    }
+                                    return match;
+                                },
+                            );
+                            // -----------------------------
 
                             // 1. Handle Assignment Cards
                             if (data.isAssignment) {

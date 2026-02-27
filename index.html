@@ -1170,7 +1170,13 @@
 
                             // 1. Link Detector: Converts standard URLs into clickable links
                             const urlRegex = /(https?:\/\/[^\s]+)/g;
+
                             content = content.replace(urlRegex, (url) => {
+                                // Check if the URL ends with .png, .jpg, .jpeg, or .gif (case-insensitive)
+                                if (/\.(png|jpe?g|gif)$/i.test(url)) {
+                                    return url; // Return the plain text without the <a> tag
+                                }
+
                                 return `<a href="${url}" target="_blank" rel="noopener noreferrer">${url}</a>`;
                             });
 

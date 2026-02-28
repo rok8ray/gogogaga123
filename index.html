@@ -753,18 +753,36 @@
                 );
                 const snap = await getDocs(q);
                 if (!snap.empty) {
+                    const s = snap.docs[0];
+                    
+                    // Check if already a member
+                    const memberCheckQ = query(
+                        collection(db, "members"),
+                        where("serverId", "==", s.id),
+                        where("userId", "==", currentUser.uid)
+                    );
+                    const memberCheckSnap = await getDocs(memberCheckQ);
+                    if (!memberCheckSnap.empty) {
+                        return alert("You are already a member of this server.");
+                    }
+
                     const blackCheck = query(
                         collection(db, "blacklist"),
                         where("serverId", "==", s.id),
                         where("userId", "==", currentUser.uid),
                     );
-                    const blackSnap = await getDocs(blackCheck);
+                    
+                    let blackSnap;
+                    try {
+                        blackSnap = await getDocs(blackCheck);
+                    } catch (e) {
+                        blackSnap = { empty: true };
+                    }
 
                     if (!blackSnap.empty) {
                         alert("You are blacklisted from this server.");
                         return;
                     }
-                    const s = snap.docs[0];
                     await addDoc(collection(db, "members"), {
                         serverId: s.id,
                         userId: currentUser.uid,
@@ -774,6 +792,8 @@
                             currentUser.displayName ||
                             currentUser.email.split("@")[0],
                     });
+                    alert("Joined server!");
+                    loadUserServers();
                 } else alert("Invalid Code");
             };
 
@@ -897,6 +917,41 @@
                 }
             };
 
+            // --- ADMIN & BLACKLIST ---
+            window.manualBlacklist = async () => {
+                const userIdInput = document.getElementById("blacklist-user-id");
+                const userId = userIdInput.value.trim();
+                if (!userId || !currentServerId) return;
+                
+                if (currentServerOwner !== currentUser.uid) {
+                    return alert("Only the server owner can ban users.");
+                }
+
+                try {
+                    // 1. Add to blacklist collection
+                    await addDoc(collection(db, "blacklist"), {
+                        serverId: currentServerId,
+                        userId: userId,
+                        bannedAt: serverTimestamp()
+                    });
+
+                    // 2. Remove from members if present
+                    const q = query(
+                        collection(db, "members"),
+                        where("serverId", "==", currentServerId),
+                        where("userId", "==", userId)
+                    );
+                    const snap = await getDocs(q);
+                    const deletes = snap.docs.map(d => deleteDoc(doc(db, "members", d.id)));
+                    await Promise.all(deletes);
+
+                    userIdInput.value = "";
+                    alert("User banned successfully.");
+                } catch (err) {
+                    alert("Error banning user: " + err.message);
+                }
+            };
+
             window.selectServer = async (id, name) => {
                 currentServerId = id;
                 document.getElementById("current-server-name").innerText = name;
@@ -924,7 +979,11 @@
                     : "none";
 
                 if (isOwner) {
-                    loadBlacklist(id);
+                    try {
+                        loadBlacklist(id);
+                    } catch (e) {
+                        console.error("Blacklist collection may not exist yet:", e);
+                    }
                 }
 
                 if (!memberSnap.empty) {

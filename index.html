@@ -231,6 +231,31 @@
                 background: #5865f2;
                 color: white;
             }
+            #blacklist-sidebar {
+                position: fixed;
+                right: 0;
+                top: 0;
+                width: 300px;
+                height: 100vh;
+                background: #2f3136;
+                border-left: 1px solid #222;
+                padding: 20px;
+                transition: transform 0.3s ease;
+                z-index: 999;
+                overflow-y: auto;
+                display: none;
+            }
+
+            #blacklist-sidebar.show {
+                transform: translateX(0);
+            }
+
+            #blacklist-list li {
+                display: flex;
+                justify-content: space-between;
+                margin-bottom: 10px;
+                font-size: 13px;
+            }
         </style>
     </head>
     <body>
@@ -367,6 +392,8 @@
                 >
                     👥 Members
                 </button>
+                <button onclick="showBlacklistPage()">Show Blacklist</button>
+                <div id="blacklist-page"></div>
             </div>
             <ul id="messages"></ul>
             <div id="mention-suggestions" class="hidden"></div>
@@ -403,6 +430,10 @@
         <div id="member-sidebar" class="hidden">
             <h3>Members</h3>
             <ul id="member-list"></ul>
+        </div>
+        <div id="blacklist-sidebar" class="hidden">
+            <h3>🚫 Blacklisted Users</h3>
+            <ul id="blacklist-list"></ul>
         </div>
 
         <script>
@@ -654,6 +685,49 @@
                 sidebar.classList.toggle("hidden");
             };
 
+            // --- BLACKLIST SIDEBAR TOGGLE ---
+            window.toggleBlacklistSidebar = () => {
+                const sidebar = document.getElementById("blacklist-sidebar");
+
+                if (sidebar.style.display === "block") {
+                    sidebar.style.display = "none";
+                } else {
+                    sidebar.style.display = "block";
+                }
+            };
+            function loadBlacklistSidebar(serverId) {
+                const q = query(
+                    collection(db, "blacklist"),
+                    where("serverId", "==", serverId),
+                );
+
+                onSnapshot(q, (snap) => {
+                    const list = document.getElementById("blacklist-list");
+                    list.innerHTML = "";
+
+                    if (snap.empty) {
+                        list.innerHTML =
+                            "<li style='color:#888;'>No banned users.</li>";
+                        return;
+                    }
+
+                    snap.forEach((docSnap) => {
+                        const data = docSnap.data();
+                        const li = document.createElement("li");
+
+                        li.innerHTML = `
+                            <span>${data.userId.substring(0, 6)}</span>
+                            <button onclick="unbanUser('${docSnap.id}')"
+                                    style="background:#5865f2; font-size:10px;">
+                                Unban
+                            </button>
+                        `;
+
+                        list.appendChild(li);
+                    });
+                });
+            }
+
             // --- ASSIGNMENT LINK ---
             window.sendAssignmentLink = async () => {
                 const url = prompt(
@@ -838,12 +912,14 @@
 
                 // Inside window.selectServer
                 const isOwner = sInfo.owner === currentUser.uid;
+                console.log(isOwner);
                 document.getElementById("admin-panel").style.display = isOwner
                     ? "block"
                     : "none";
 
                 if (isOwner) {
                     loadBlacklist(id);
+                    loadBlacklistSidebar(id);
                 }
 
                 if (!memberSnap.empty) {
@@ -998,6 +1074,52 @@
                 }
                 loadMessages(id);
                 loadMembers(id);
+            };
+
+            window.showBlacklistPage = async () => {
+                if (!currentServerId) {
+                    alert("No server selected.");
+                    return;
+                }
+
+                const container = document.getElementById("blacklist-page");
+
+                // Toggle visibility
+                if (container.style.display === "block") {
+                    container.style.display = "none";
+                    return;
+                }
+
+                container.style.display = "block";
+                container.innerHTML = "<h2>Blacklisted Users</h2>";
+
+                const q = query(
+                    collection(db, "blacklist"),
+                    where("serverId", "==", currentServerId),
+                );
+
+                const snap = await getDocs(q);
+
+                if (snap.empty) {
+                    container.innerHTML += "<p>No banned users.</p>";
+                    return;
+                }
+
+                snap.forEach((docSnap) => {
+                    const data = docSnap.data();
+
+                    const div = document.createElement("div");
+                    div.style.marginBottom = "10px";
+
+                    div.innerHTML = `
+                        <span>${data.userId}</span>
+                        <button onclick="unbanUser('${docSnap.id}')">
+                            Unban
+                        </button>
+                    `;
+
+                    container.appendChild(div);
+                });
             };
 
             window.leaveServer = async () => {

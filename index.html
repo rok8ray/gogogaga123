@@ -720,6 +720,7 @@
                 );
                 const snap = await getDocs(q);
                 if (!snap.empty) {
+                    const s = snap.docs[0];
                     const blackCheck = query(
                         collection(db, "blacklist"),
                         where("serverId", "==", s.id),
@@ -731,7 +732,6 @@
                         alert("You are blacklisted from this server.");
                         return;
                     }
-                    const s = snap.docs[0];
                     await addDoc(collection(db, "members"), {
                         serverId: s.id,
                         userId: currentUser.uid,

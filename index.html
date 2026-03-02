@@ -1248,11 +1248,12 @@
             function loadMessages(serverId) {
                 if (unsubMessages) unsubMessages();
 
-                // Load all members for this server once to map UIDs to names
+                // 1. Load all members for this server once to map UIDs to names
                 const membersQ = query(
                     collection(db, "members"),
                     where("serverId", "==", serverId),
                 );
+
                 getDocs(membersQ).then((memberSnap) => {
                     const memberMap = {};
                     memberSnap.forEach((mDoc) => {
@@ -1263,6 +1264,7 @@
                             mData.userId.substring(0, 5);
                     });
 
+                    // 2. Setup the real-time message listener
                     const q = query(
                         collection(db, "messages"),
                         where("serverId", "==", serverId),
@@ -1293,64 +1295,10 @@
                                   })
                                 : "...";
 
-                            // --- NEW PROCESSING LOGIC ---
                             let content = data.text;
 
-                            // 1. Link Detector: Converts standard URLs into clickable links
-                            const urlRegex = /(https?:\/\/[^\s]+)/g;
-                            content = content.replace(urlRegex, (url) => {
-                                return `<a href="${url}" target="_blank" rel="noopener noreferrer">${url}</a>`;
-                            });
-
-                            // Check if the content contains at least one loudspeaker emoji
-                            if (content.includes("📢")) {
-                                // Remove all loudspeaker emojis and wrap the entire string
-                                content = `<span class="loud">${content.replace(/📢/g, "")}</span>`;
-                            }
-
-                            // --- Smart Mention Detector (Handles spaces & emojis) ---
-                            const mentionRegex = /@([^\n]+)/g; // Look at everything after the @ on that line
-
-                            content = content.replace(
-                                mentionRegex,
-                                (match, fullTextAfterAt) => {
-                                    // We get a list of all current usernames in the server
-                                    const usernames = Object.values(memberMap);
-
-                                    // Sort usernames by length (longest first) so we don't
-                                    // accidentally match "Greg" if the user is "Greg 😄"
-                                    const sortedUsernames = usernames.sort(
-                                        (a, b) => b.length - a.length,
-                                    );
-
-                                    for (let name of sortedUsernames) {
-                                        // Check if the text immediately following the @ starts with a valid username
-                                        if (
-                                            fullTextAfterAt
-                                                .toLowerCase()
-                                                .startsWith(name.toLowerCase())
-                                        ) {
-                                            const actualNameInText =
-                                                fullTextAfterAt.substring(
-                                                    0,
-                                                    name.length,
-                                                );
-                                            const remainingText =
-                                                fullTextAfterAt.substring(
-                                                    name.length,
-                                                );
-
-                                            return `<span style="background: rgba(88, 101, 242, 0.3); color: #dee0fc; padding: 0 4px; border-radius: 3px; font-weight: 500;">@${actualNameInText}</span>${remainingText}`;
-                                        }
-                                    }
-
-                                    // If no member matches the text after @, leave it alone
-                                    return match;
-                                },
-                            );
-                            // -----------------------------
-
-                            // 1. Handle Assignment Cards
+                            // --- NEW PROCESSING LOGIC ---
+                            // We use an IF/ELSE block so we don't try to "linkify" images or assignments
                             if (data.isAssignment) {
                                 content = `
                                     <div style="background: #e8f0fe; border-left: 5px solid #1967d2; padding: 12px; border-radius: 4px; color: #1967d2; margin-top: 5px; max-width: 300px;">
@@ -1359,11 +1307,80 @@
                                             Open in Classroom
                                         </a>
                                     </div>`;
-                            }
-                            // 2. Handle Images
-                            else if (checkIsImg(data.text)) {
+                            } else if (checkIsImg(data.text)) {
                                 content = `<img src="${data.text}" style="max-width: 100%; max-height: 300px; border-radius: 8px; display: block; margin-top: 5px;">`;
+                            } else {
+                                // --- REGEX PARSING FOR PLAIN TEXT ---
+
+                                // A. Loudspeaker
+                                if (content.includes("📢")) {
+                                    content = `<span class="loud">${content.replace(/📢/g, "")}</span>`;
+                                }
+
+                                // B. YouTube Standard
+                                const youtubeRegex =
+                                    /https:\/\/www\.youtube\.com\/watch\?v=([a-zA-Z0-9_-]+)/g;
+                                content = content.replace(
+                                    youtubeRegex,
+                                    (match, videoId) => {
+                                        return `<iframe width="560" height="315" src="https://www.youtube.com/embed/${videoId}" frameborder="0" allowfullscreen></iframe>`;
+                                    },
+                                );
+
+                                // C. YouTube Shorts
+                                const shortRegex =
+                                    /https:\/\/www\.youtube\.com\/shorts\/([a-zA-Z0-9_-]+)/g;
+                                content = content.replace(
+                                    shortRegex,
+                                    (match, videoId) => {
+                                        return `<iframe width="315" height="560" src="https://www.youtube.com/embed/${videoId}" frameborder="0" allowfullscreen style="border-radius:8px;"></iframe>`;
+                                    },
+                                );
+
+                                // D. Mentions
+                                const mentionRegex = /@([^\n]+)/g;
+                                content = content.replace(
+                                    mentionRegex,
+                                    (match, fullTextAfterAt) => {
+                                        const usernames =
+                                            Object.values(memberMap);
+                                        const sortedUsernames = usernames.sort(
+                                            (a, b) => b.length - a.length,
+                                        );
+
+                                        for (let name of sortedUsernames) {
+                                            if (
+                                                fullTextAfterAt
+                                                    .toLowerCase()
+                                                    .startsWith(
+                                                        name.toLowerCase(),
+                                                    )
+                                            ) {
+                                                const actualNameInText =
+                                                    fullTextAfterAt.substring(
+                                                        0,
+                                                        name.length,
+                                                    );
+                                                const remainingText =
+                                                    fullTextAfterAt.substring(
+                                                        name.length,
+                                                    );
+                                                return `<span class="mention-style">@${actualNameInText}</span>${remainingText}`;
+                                            }
+                                        }
+                                        return match;
+                                    },
+                                );
+
+                                // E. General Links (Last)
+                                // This avoids links already inside HTML tags or pointing to YouTube/Images
+                                const urlRegex =
+                                    /https?:\/\/(?!(www\.)?(youtube\.com|youtu\.be))(?![^"'>]*\.(?:png|jpg|jpeg|gif))(?![^<]*>)[^\s]+/g;
+                                content = content.replace(urlRegex, (url) => {
+                                    return `<a href="${url}" target="_blank" rel="noopener noreferrer">${url}</a>`;
+                                });
                             }
+                            // -----------------------------
 
                             const senderName =
                                 memberMap[data.userId] ||
@@ -1380,7 +1397,7 @@
 
                             const li = document.createElement("li");
 
-                            // 3. Grouping Logic
+                            // Grouping Logic
                             if (
                                 lastMsg &&
                                 lastMsg.userId === data.userId &&
@@ -1393,12 +1410,12 @@
                             }
 
                             list.appendChild(li);
-                            lastMsg = { ...data, createdAt: data.createdAt }; // Store for next loop
-                        });
+                            lastMsg = { ...data, createdAt: data.createdAt };
+                        }); // End docs.forEach
                         list.scrollTop = list.scrollHeight;
-                    });
-                });
-            }
+                    }); // End onSnapshot
+                }); // End getDocs.then
+            } // End loadMessages
 
             document.getElementById("input-area").onsubmit = async (e) => {
                 e.preventDefault();

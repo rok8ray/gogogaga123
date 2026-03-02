@@ -256,6 +256,12 @@
                 margin-bottom: 10px;
                 font-size: 13px;
             }
+
+            /* text decor */
+            .loud {
+                font-size: 50px;
+                font-weight: bold;
+            }
         </style>
     </head>
     <body>
@@ -1296,25 +1302,49 @@
                                 return `<a href="${url}" target="_blank" rel="noopener noreferrer">${url}</a>`;
                             });
 
-                            // 2. Username Mention: Checks for @name and highlights it if the user exists
-                            const mentionRegex = /@(\S+)/g;
+                            // Check if the content contains at least one loudspeaker emoji
+                            if (content.includes("📢")) {
+                                // Remove all loudspeaker emojis and wrap the entire string
+                                content = `<span class="loud">${content.replace(/📢/g, "")}</span>`;
+                            }
+
+                            // --- Smart Mention Detector (Handles spaces & emojis) ---
+                            const mentionRegex = /@([^\n]+)/g; // Look at everything after the @ on that line
 
                             content = content.replace(
                                 mentionRegex,
-                                (match, username) => {
-                                    // We remove the '@' to check the name against our member list
-                                    const cleanName = username.toLowerCase();
+                                (match, fullTextAfterAt) => {
+                                    // We get a list of all current usernames in the server
+                                    const usernames = Object.values(memberMap);
 
-                                    const exists = Object.values(
-                                        memberMap,
-                                    ).some(
-                                        (name) =>
-                                            name.toLowerCase() === cleanName,
+                                    // Sort usernames by length (longest first) so we don't
+                                    // accidentally match "Greg" if the user is "Greg 😄"
+                                    const sortedUsernames = usernames.sort(
+                                        (a, b) => b.length - a.length,
                                     );
 
-                                    if (exists) {
-                                        return `<span style="background: rgba(88, 101, 242, 0.3); color: #dee0fc; padding: 0 4px; border-radius: 3px; font-weight: 500;">${match}</span>`;
+                                    for (let name of sortedUsernames) {
+                                        // Check if the text immediately following the @ starts with a valid username
+                                        if (
+                                            fullTextAfterAt
+                                                .toLowerCase()
+                                                .startsWith(name.toLowerCase())
+                                        ) {
+                                            const actualNameInText =
+                                                fullTextAfterAt.substring(
+                                                    0,
+                                                    name.length,
+                                                );
+                                            const remainingText =
+                                                fullTextAfterAt.substring(
+                                                    name.length,
+                                                );
+
+                                            return `<span style="background: rgba(88, 101, 242, 0.3); color: #dee0fc; padding: 0 4px; border-radius: 3px; font-weight: 500;">@${actualNameInText}</span>${remainingText}`;
+                                        }
                                     }
+
+                                    // If no member matches the text after @, leave it alone
                                     return match;
                                 },
                             );

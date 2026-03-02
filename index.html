@@ -338,42 +338,9 @@
                 <h4 style="margin: 0 0 10px 0; font-size: 14px; color: #ed4245">
                     Server Blacklist
                 </h4>
-
-                <div style="display: flex; gap: 5px; margin-bottom: 10px">
-                    <input
-                        id="blacklist-user-id"
-                        placeholder="User ID to ban..."
-                        style="
-                            flex-grow: 1;
-                            font-size: 11px;
-                            padding: 5px;
-                            background: #202225;
-                            color: white;
-                            border: 1px solid #444;
-                            border-radius: 3px;
-                        "
-                    />
-                    <button
-                        onclick="manualBlacklist()"
-                        style="
-                            font-size: 11px;
-                            padding: 5px 10px;
-                            background: #ed4245;
-                        "
-                    >
-                        Ban
-                    </button>
-                </div>
-
                 <ul
                     id="blacklist-items"
-                    style="
-                        list-style: none;
-                        padding: 0;
-                        font-size: 12px;
-                        max-height: 150px;
-                        overflow-y: auto;
-                    "
+                    style="list-style: none; padding: 0; font-size: 12px"
                 ></ul>
             </div>
 
@@ -753,38 +720,18 @@
                 );
                 const snap = await getDocs(q);
                 if (!snap.empty) {
-                    const s = snap.docs[0];
-
-                    // Check if already a member
-                    const memberCheckQ = query(
-                        collection(db, "members"),
-                        where("serverId", "==", s.id),
-                        where("userId", "==", currentUser.uid),
-                    );
-                    const memberCheckSnap = await getDocs(memberCheckQ);
-                    if (!memberCheckSnap.empty) {
-                        return alert(
-                            "You are already a member of this server.",
-                        );
-                    }
-
                     const blackCheck = query(
                         collection(db, "blacklist"),
                         where("serverId", "==", s.id),
                         where("userId", "==", currentUser.uid),
                     );
-
-                    let blackSnap;
-                    try {
-                        blackSnap = await getDocs(blackCheck);
-                    } catch (e) {
-                        blackSnap = { empty: true };
-                    }
+                    const blackSnap = await getDocs(blackCheck);
 
                     if (!blackSnap.empty) {
                         alert("You are blacklisted from this server.");
                         return;
                     }
+                    const s = snap.docs[0];
                     await addDoc(collection(db, "members"), {
                         serverId: s.id,
                         userId: currentUser.uid,
@@ -794,8 +741,6 @@
                             currentUser.displayName ||
                             currentUser.email.split("@")[0],
                     });
-                    alert("Joined server!");
-                    loadUserServers();
                 } else alert("Invalid Code");
             };
 
@@ -871,92 +816,6 @@
                 }
             });
 
-            window.manualBlacklist = async () => {
-                const targetUserId = document
-                    .getElementById("blacklist-user-id")
-                    .value.trim();
-
-                if (!targetUserId) return alert("Please enter a User ID.");
-                if (targetUserId === currentUser.uid)
-                    return alert("You cannot blacklist yourself.");
-
-                try {
-                    // 1. Check if already blacklisted
-                    const q = query(
-                        collection(db, "blacklist"),
-                        where("serverId", "==", currentServerId),
-                        where("userId", "==", targetUserId),
-                    );
-                    const snap = await getDocs(q);
-                    if (!snap.empty)
-                        return alert("User is already blacklisted.");
-
-                    // 2. Add to blacklist
-                    await addDoc(collection(db, "blacklist"), {
-                        serverId: currentServerId,
-                        userId: targetUserId,
-                        bannedAt: serverTimestamp(),
-                        manualEntry: true,
-                    });
-
-                    // 3. Remove existing membership if they are currently in the server
-                    const memQ = query(
-                        collection(db, "members"),
-                        where("serverId", "==", currentServerId),
-                        where("userId", "==", targetUserId),
-                    );
-                    const memSnap = await getDocs(memQ);
-                    memSnap.forEach(async (mDoc) => {
-                        await deleteDoc(doc(db, "members", mDoc.id));
-                    });
-
-                    document.getElementById("blacklist-user-id").value = "";
-                    alert(
-                        "User ID added to blacklist and removed from server.",
-                    );
-                } catch (err) {
-                    alert("Error updating blacklist: " + err.message);
-                }
-            };
-
-            // --- ADMIN & BLACKLIST ---
-            window.manualBlacklist = async () => {
-                const userIdInput =
-                    document.getElementById("blacklist-user-id");
-                const userId = userIdInput.value.trim();
-                if (!userId || !currentServerId) return;
-
-                if (currentServerOwner !== currentUser.uid) {
-                    return alert("Only the server owner can ban users.");
-                }
-
-                try {
-                    // 1. Add to blacklist collection
-                    await addDoc(collection(db, "blacklist"), {
-                        serverId: currentServerId,
-                        userId: userId,
-                        bannedAt: serverTimestamp(),
-                    });
-
-                    // 2. Remove from members if present
-                    const q = query(
-                        collection(db, "members"),
-                        where("serverId", "==", currentServerId),
-                        where("userId", "==", userId),
-                    );
-                    const snap = await getDocs(q);
-                    const deletes = snap.docs.map((d) =>
-                        deleteDoc(doc(db, "members", d.id)),
-                    );
-                    await Promise.all(deletes);
-
-                    userIdInput.value = "";
-                    alert("User banned successfully.");
-                } catch (err) {
-                    alert("Error banning user: " + err.message);
-                }
-            };
-
             window.selectServer = async (id, name) => {
                 currentServerId = id;
                 document.getElementById("current-server-name").innerText = name;
@@ -984,14 +843,7 @@
                     : "none";
 
                 if (isOwner) {
-                    try {
-                        loadBlacklist(id);
-                    } catch (e) {
-                        console.error(
-                            "Blacklist collection may not exist yet:",
-                            e,
-                        );
-                    }
+                    loadBlacklist(id);
                 }
 
                 if (!memberSnap.empty) {
@@ -1318,54 +1170,29 @@
 
                             // 1. Link Detector: Converts standard URLs into clickable links
                             const urlRegex = /(https?:\/\/[^\s]+)/g;
-
                             content = content.replace(urlRegex, (url) => {
-                                // Check if the URL ends with .png, .jpg, .jpeg, or .gif (case-insensitive)
-                                if (/\.(png|jpe?g|gif)$/i.test(url)) {
-                                    return url; // Return the plain text without the <a> tag
-                                }
-
                                 return `<a href="${url}" target="_blank" rel="noopener noreferrer">${url}</a>`;
                             });
 
                             // 2. Username Mention: Checks for @name and highlights it if the user exists
-                            // --- Smart Mention Detector (Handles spaces & emojis) ---
-                            const mentionRegex = /@([^\n]+)/g; // Look at everything after the @ on that line
+                            const mentionRegex = /@(\S+)/g;
 
                             content = content.replace(
                                 mentionRegex,
-                                (match, fullTextAfterAt) => {
-                                    // We get a list of all current usernames in the server
-                                    const usernames = Object.values(memberMap);
+                                (match, username) => {
+                                    // We remove the '@' to check the name against our member list
+                                    const cleanName = username.toLowerCase();
 
-                                    // Sort usernames by length (longest first) so we don't
-                                    // accidentally match "Greg" if the user is "Greg 😄"
-                                    const sortedUsernames = usernames.sort(
-                                        (a, b) => b.length - a.length,
+                                    const exists = Object.values(
+                                        memberMap,
+                                    ).some(
+                                        (name) =>
+                                            name.toLowerCase() === cleanName,
                                     );
 
-                                    for (let name of sortedUsernames) {
-                                        // Check if the text immediately following the @ starts with a valid username
-                                        if (
-                                            fullTextAfterAt
-                                                .toLowerCase()
-                                                .startsWith(name.toLowerCase())
-                                        ) {
-                                            const actualNameInText =
-                                                fullTextAfterAt.substring(
-                                                    0,
-                                                    name.length,
-                                                );
-                                            const remainingText =
-                                                fullTextAfterAt.substring(
-                                                    name.length,
-                                                );
-
-                                            return `<span style="background: rgba(88, 101, 242, 0.3); color: #dee0fc; padding: 0 4px; border-radius: 3px; font-weight: 500;">@${actualNameInText}</span>${remainingText}`;
-                                        }
+                                    if (exists) {
+                                        return `<span style="background: rgba(88, 101, 242, 0.3); color: #dee0fc; padding: 0 4px; border-radius: 3px; font-weight: 500;">${match}</span>`;
                                     }
-
-                                    // If no member matches the text after @, leave it alone
                                     return match;
                                 },
                             );

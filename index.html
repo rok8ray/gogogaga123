@@ -208,6 +208,20 @@
             a {
                 color: #507fa7;
             }
+            #mention {
+                background: rgba(88, 101, 242, 0.3);
+                color: #dee0fc;
+                padding: 0 4px;
+                border-radius: 3px;
+                font-weight: bold;
+            }
+            #mention:hover {
+                background: rgba(88, 101, 242, 1);
+                color: #dee0fc;
+                padding: 0 4px;
+                border-radius: 3px;
+                font-weight: bold;
+            }
             #mention-suggestions {
                 position: absolute;
                 bottom: 70px; /* Position it above the input area */
@@ -1338,37 +1352,46 @@
                                 );
 
                                 // D. Mentions
-                                const mentionRegex = /@([^\n]+)/g;
+                                // This regex looks for @ followed by any characters until a space or end of string
+                                const mentionRegex = /@(\S+)/g;
+
                                 content = content.replace(
                                     mentionRegex,
-                                    (match, fullTextAfterAt) => {
+                                    (match, usernameAttempt) => {
                                         const usernames =
                                             Object.values(memberMap);
+
+                                        // Sort by length descending so "John Doe" is checked before "John"
                                         const sortedUsernames = usernames.sort(
                                             (a, b) => b.length - a.length,
                                         );
 
                                         for (let name of sortedUsernames) {
+                                            const cleanName = name.trim();
+                                            // Check if the text following the @ starts with a valid username
                                             if (
-                                                fullTextAfterAt
+                                                usernameAttempt
                                                     .toLowerCase()
                                                     .startsWith(
-                                                        name.toLowerCase(),
+                                                        cleanName.toLowerCase(),
                                                     )
                                             ) {
+                                                // Extract the part that is actually the name
                                                 const actualNameInText =
-                                                    fullTextAfterAt.substring(
+                                                    usernameAttempt.substring(
                                                         0,
-                                                        name.length,
+                                                        cleanName.length,
                                                     );
+                                                // Keep the rest (like punctuation: "@John!")
                                                 const remainingText =
-                                                    fullTextAfterAt.substring(
-                                                        name.length,
+                                                    usernameAttempt.substring(
+                                                        cleanName.length,
                                                     );
-                                                return `<span class="mention-style">@${actualNameInText}</span>${remainingText}`;
+
+                                                return `<span id="mention">@${actualNameInText}</span>${remainingText}`;
                                             }
                                         }
-                                        return match;
+                                        return match; // No match found, return original text
                                     },
                                 );
 

@@ -505,6 +505,7 @@
             let currentServerId = null;
             let currentServerOwner = null;
             let unsubMessages = null;
+            let memberMap = {}; // Add this line here
 
             // --- PANIC FEATURE (CTRL + K) ---
             document.addEventListener("keydown", (e) => {
@@ -1098,13 +1099,13 @@
 
             window.showBlacklistPage = async () => {
                 if (!currentServerId) {
-                    alert("No server selected.");
+                    alert(
+                        "You didn't select a server. memory of a goldfish istg",
+                    );
                     return;
                 }
 
                 const container = document.getElementById("blacklist-page");
-
-                // Toggle visibility
                 if (container.style.display === "block") {
                     container.style.display = "none";
                     return;
@@ -1119,25 +1120,26 @@
                 );
 
                 const snap = await getDocs(q);
-
                 if (snap.empty) {
-                    container.innerHTML += "<p>No banned users.</p>";
+                    container.innerHTML +=
+                        "<p>No banned users. Why did you click this then vro -_-</p>";
                     return;
                 }
 
                 snap.forEach((docSnap) => {
                     const data = docSnap.data();
+                    // Use the displayName we saved during the kick
+                    const nameToShow = data.displayName || data.userId;
 
                     const div = document.createElement("div");
-                    div.style.marginBottom = "10px";
-
+                    div.style.cssText =
+                        "display: flex; justify-content: space-between; margin-bottom: 10px; padding: 8px; background: #2f3136; border-radius: 4px;";
                     div.innerHTML = `
-                        <span>${data.userId}</span>
-                        <button onclick="unbanUser('${docSnap.id}')">
+                        <span style="color: #ed4245; font-weight: bold;">${nameToShow}</span>
+                        <button onclick="unbanUser('${docSnap.id}')" style="background: #5865f2; font-size: 12px;">
                             Unban
                         </button>
                     `;
-
                     container.appendChild(div);
                 });
             };
@@ -1172,7 +1174,7 @@
 
                 if (targetUserId === currentUser.uid) {
                     return alert(
-                        "You cannot kick yourself! Use 'Leave Server' instead.",
+                        "You dumbahh, you can't kick yourself! Use 'Leave Server' instead.",
                     );
                 }
 
@@ -1180,7 +1182,19 @@
                     return;
 
                 try {
-                    // Find the membership document for this user in this server
+                    // --- NEW LOGIC: Capture the name before kicking ---
+                    const nameToSave =
+                        memberMap[targetUserId] || "Unknown User";
+
+                    // 1. Add to blacklist WITH the display name
+                    await addDoc(collection(db, "blacklist"), {
+                        serverId: currentServerId,
+                        userId: targetUserId,
+                        displayName: nameToSave, // Save the name permanently here
+                        bannedAt: serverTimestamp(),
+                    });
+
+                    // 2. Find the membership document for this user in this server
                     const q = query(
                         collection(db, "members"),
                         where("serverId", "==", currentServerId),
@@ -1198,7 +1212,11 @@
                         alert("Member not found.");
                     }
                 } catch (err) {
-                    alert("Error kicking member: " + err.message);
+                    alert(
+                        `I think my foot missed
+                    
+                    Error kicking member: ` + err.message,
+                    );
                 }
                 if (!confirm("Kick and blacklist this member?")) return;
 
@@ -1269,7 +1287,7 @@
                 );
 
                 getDocs(membersQ).then((memberSnap) => {
-                    const memberMap = {};
+                    memberMap = {};
                     memberSnap.forEach((mDoc) => {
                         const mData = mDoc.data();
                         memberMap[mData.userId] =

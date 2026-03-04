@@ -83,6 +83,7 @@
                 padding: 20px;
                 /* ADD THIS LINE */
                 overflow-y: auto;
+                overflow-x: hidden;
             }
 
             #user-info {
@@ -99,6 +100,7 @@
                 background: var(--bg-chat);
                 display: flex;
                 flex-direction: column;
+                overflow: hidden;
             }
             #messages {
                 flex-grow: 1;
@@ -106,9 +108,15 @@
                 padding: 20px;
                 list-style: none;
                 margin: 0;
+                overflow-x: wrap;
+                width: 100%;
             }
             #messages li {
                 margin-bottom: 15px;
+                word-wrap: break-word;
+                overflow-wrap: break-word;
+                /* Prevents the list items from overflowing their container */
+                max-width: 100%;
             }
             #messages li.grouped {
                 margin-top: -10px;
@@ -236,6 +244,7 @@
                 padding: 0 4px;
                 border-radius: 3px;
                 font-weight: bold;
+                cursor: url("/assets/dihpointer.png"), pointer;
             }
             #mention-suggestions {
                 position: absolute;
@@ -1386,50 +1395,51 @@
 
                                 // D. Mentions
                                 // This regex looks for @ followed by any characters until a space or end of string
-                                const mentionRegex = /@(\S+)/g;
+                                // D. Mentions
+                                // Look for @ followed by any text
+                                const mentionRegex = /@(.+?)(?=\s|$|[.,!?;])/g;
 
                                 content = content.replace(
-                                    mentionRegex,
-                                    (match, usernameAttempt) => {
+                                    /@([^\s,?.!]+(?:\s[^\s,?.!]+)*)/g,
+                                    (match, fullAttempt) => {
                                         const usernames =
                                             Object.values(memberMap);
 
-                                        // Sort by length descending so "John Doe" is checked before "John"
+                                        // Sort names by length descending (Longest names first)
                                         const sortedUsernames = usernames.sort(
                                             (a, b) => b.length - a.length,
                                         );
 
                                         for (let name of sortedUsernames) {
                                             const cleanName = name.trim();
-                                            // Check if the text following the @ starts with a valid username
+                                            // Check if the text immediately following the @ starts with a known username
                                             if (
-                                                usernameAttempt
+                                                fullAttempt
                                                     .toLowerCase()
                                                     .startsWith(
                                                         cleanName.toLowerCase(),
                                                     )
                                             ) {
-                                                // Extract the part that is actually the name
                                                 const actualNameInText =
-                                                    usernameAttempt.substring(
+                                                    fullAttempt.substring(
                                                         0,
                                                         cleanName.length,
                                                     );
-                                                // Keep the rest (like punctuation: "@John!")
                                                 const remainingText =
-                                                    usernameAttempt.substring(
+                                                    fullAttempt.substring(
                                                         cleanName.length,
                                                     );
 
                                                 return `<span id="mention">@${actualNameInText}</span>${remainingText}`;
                                             }
                                         }
-                                        return match; // No match found, return original text
+                                        return match; // No user found, leave it as plain text
                                     },
                                 );
 
                                 // E. General Links (Last)
                                 // This avoids links already inside HTML tags or pointing to YouTube/Images
+
                                 const urlRegex =
                                     /https?:\/\/(?!(www\.)?(youtube\.com|youtu\.be))(?![^"'>]*\.(?:png|jpg|jpeg|gif))(?![^<]*>)[^\s]+/g;
                                 content = content.replace(urlRegex, (url) => {

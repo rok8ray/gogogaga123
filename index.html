@@ -304,6 +304,40 @@
                 font-size: 50px;
                 font-weight: bold;
             }
+            .server-wrapper {
+                position: relative;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+            }
+
+            .unread-badge {
+                position: absolute;
+                top: -2px;
+                right: -2px;
+                background: var(--danger);
+                color: white;
+                font-size: 11px;
+                font-weight: bold;
+                padding: 2px 6px;
+                border-radius: 10px;
+                border: 3px solid var(--bg-dark);
+                pointer-events: none;
+                display: none; /* Hidden by default */
+            }
+
+            .unread-badge.show {
+                display: block;
+            }
+            /* Styling for code strings */
+            code {
+                background: #2f3136;
+                padding: 2px 5px;
+                border-radius: 4px;
+                font-family: "Consolas", "Courier New", monospace;
+                color: #e3e3e3;
+                font-size: 0.9em;
+            }
         </style>
     </head>
     <body>
@@ -905,6 +939,58 @@
                         );
                         // --------------------------------------
 
+                        // Inside the snap.forEach((mDoc) => { ... }) loop:
+                        const badge = document.createElement("div");
+                        badge.className = "unread-badge";
+                        badge.id = `badge-${mData.serverId}`;
+
+                        // Wrap the icon and badge together
+                        const wrapper = document.createElement("div");
+                        wrapper.className = "server-wrapper";
+                        wrapper.appendChild(el); // This is your existing 'el' (the icon)
+                        wrapper.appendChild(badge);
+                        list.appendChild(wrapper);
+
+                        // Setup a listener for NEW messages in this specific server
+                        const msgQuery = query(
+                            collection(db, "messages"),
+                            where("serverId", "==", mData.serverId),
+                            orderBy("createdAt", "desc"),
+                            limit(10), // Just check the most recent ones
+                        );
+
+                        onSnapshot(msgQuery, (mSnap) => {
+                            const lastRead =
+                                localStorage.getItem(
+                                    `lastRead_${mData.serverId}`,
+                                ) || 0;
+                            let unreadCount = 0;
+
+                            mSnap.forEach((msgDoc) => {
+                                const msgData = msgDoc.data();
+                                if (
+                                    msgData.createdAt &&
+                                    msgData.createdAt.toMillis() > lastRead
+                                ) {
+                                    // Only count messages NOT sent by the current user
+                                    if (msgData.userId !== currentUser.uid) {
+                                        unreadCount++;
+                                    }
+                                }
+                            });
+
+                            if (
+                                unreadCount > 0 &&
+                                mData.serverId !== currentServerId
+                            ) {
+                                badge.innerText =
+                                    unreadCount > 9 ? "9+" : unreadCount;
+                                badge.classList.add("show");
+                            } else {
+                                badge.classList.remove("show");
+                            }
+                        });
+
                         el.onclick = () =>
                             selectServer(mData.serverId, mData.serverName);
                         list.appendChild(el);
@@ -958,6 +1044,12 @@
                     where("userId", "==", currentUser.uid),
                 );
                 const memberSnap = await getDocs(memberQuery);
+                // Save the last time this server was viewed locally
+                localStorage.setItem(`lastRead_${id}`, Date.now());
+                const badge = document.getElementById(`badge-${id}`);
+                if (badge) {
+                    badge.classList.remove("show");
+                }
 
                 // Inside window.selectServer
                 const isOwner = sInfo.owner === currentUser.uid;
@@ -1371,6 +1463,20 @@
                                 content = `<img src="${data.text}" style="max-width: 100%; max-height: 300px; border-radius: 8px; display: block; margin-top: 5px;">`;
                             } else {
                                 // --- REGEX PARSING FOR PLAIN TEXT ---
+
+                                // --- CODE STRING LOGIC ---
+                                // This looks for anything between ` ` and wraps it in <code> tags
+                                const codeRegex = /`([^`]+)`/g;
+                                content = content.replace(
+                                    codeRegex,
+                                    (match, codeText) => {
+                                        // We escape the codeText to prevent accidental HTML injection
+                                        const escaped = codeText
+                                            .replace(/</g, "&lt;")
+                                            .replace(/>/g, "&gt;");
+                                        return `<code>${escaped}</code>`;
+                                    },
+                                );
 
                                 // A. Loudspeaker
                                 if (content.includes("📢")) {

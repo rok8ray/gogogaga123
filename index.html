@@ -338,6 +338,37 @@
                 color: #e3e3e3;
                 font-size: 0.9em;
             }
+
+            /* The small preview bar above the input when replying */
+            #reply-preview {
+                background: #2f3136;
+                padding: 5px 15px;
+                display: flex;
+                justify-content: space-between;
+                align-items: center;
+                font-size: 12px;
+                border-top-left-radius: 8px;
+                border-top-right-radius: 8px;
+                border-bottom: 1px solid #222;
+            }
+
+            /* The tiny curved line/text for the reply inside the chat */
+            .reply-context {
+                font-size: 12px;
+                color: #b9bbbe;
+                margin-bottom: 4px;
+                display: flex;
+                align-items: center;
+                gap: 5px;
+            }
+            .reply-context::before {
+                content: "";
+                width: 15px;
+                height: 8px;
+                border-left: 2px solid #4f545c;
+                border-top: 2px solid #4f545c;
+                border-top-left-radius: 4px;
+            }
         </style>
     </head>
     <body>
@@ -479,6 +510,10 @@
             </div>
             <ul id="messages"></ul>
             <div id="mention-suggestions" class="hidden"></div>
+            <div id="reply-preview" style="display: none">
+                <span id="reply-text"></span>
+                <span onclick="cancelReply()" style="cursor: pointer">✕</span>
+            </div>
             <form id="input-area">
                 <input
                     id="msg-input"
@@ -761,6 +796,26 @@
                     });
                 });
             }
+
+            // --- REPLIES ---
+            let replyToId = null;
+
+            window.setReply = (msgId, user, text) => {
+                replyToId = msgId;
+                const preview = document.getElementById("reply-preview");
+                const previewText = document.getElementById("reply-text");
+                preview.style.display = "flex";
+                previewText.innerText = `Replying to ${user}: ${text.substring(0, 30)}...`;
+                document.getElementById("msg-input").focus();
+            };
+
+            window.cancelReply = () => {
+                replyToId = null;
+                document.getElementById("reply-preview").style.display = "none";
+            };
+
+            // Add this into your loadMessages loop where you define deleteBtn
+            const replyBtn = `<span class="delete-btn" style="color: #b9bbbe;" onclick="setReply('${messageId}', '${senderName}', '${data.text.replace(/'/g, "\\'")}')">💬</span>`;
 
             // --- MEMBER SIDEBAR TOGGLE ---
             window.toggleMembers = () => {
@@ -1298,7 +1353,11 @@
                     );
                 }
 
-                if (!confirm("Are you sure you want to kick this member?"))
+                if (
+                    !confirm(
+                        "Are you sure you want to kick this guy bro (mod abuse is bad 🤬🚨",
+                    )
+                )
                     return;
 
                 try {
@@ -1405,6 +1464,28 @@
                     collection(db, "members"),
                     where("serverId", "==", serverId),
                 );
+
+                // Inside loadMessages, before the li.innerHTML assignments:
+                let replyHTML = "";
+                if (data.replyTo) {
+                    // Attempt to find the original message text from the current snapshot
+                    const originalMsg = docs.find((d) => d.id === data.replyTo);
+                    const originalText = originalMsg
+                        ? originalMsg.data().text
+                        : "Original message deleted";
+                    const originalUser = originalMsg
+                        ? memberMap[originalMsg.data().userId] || "User"
+                        : "User";
+
+                    replyHTML = `<div class="reply-context">${originalUser}: ${originalText.substring(0, 40)}...</div>`;
+                }
+
+                // Update your innerHTML assignments to include ${replyHTML}
+                if (li.className === "grouped") {
+                    li.innerHTML = `${replyHTML}<div>${content} ${replyBtn} ${deleteBtn}</div>`;
+                } else {
+                    li.innerHTML = `${replyHTML}<span class="msg-user">${senderName}</span><span class="msg-time">${time}</span> ${replyBtn} ${deleteBtn}<br>${content}`;
+                }
 
                 getDocs(membersQ).then((memberSnap) => {
                     memberMap = {};
@@ -1596,18 +1677,22 @@
             document.getElementById("input-area").onsubmit = async (e) => {
                 e.preventDefault();
                 const val = document.getElementById("msg-input").value;
-                // .trim() removes spaces from the start and end.
-                // If the message was "   ", val.trim() becomes "" (empty).
-                if (!val.trim() || !currentServerId) {
-                    return; // Exit the function and do nothing
-                }
-                document.getElementById("msg-input").value = "";
-                await addDoc(collection(db, "messages"), {
+                if (!val.trim() || !currentServerId) return;
+
+                const msgData = {
                     text: val,
                     userId: auth.currentUser.uid,
                     serverId: currentServerId,
                     createdAt: serverTimestamp(),
-                });
+                };
+
+                if (replyToId) {
+                    msgData.replyTo = replyToId; // Link to the original message
+                }
+
+                document.getElementById("msg-input").value = "";
+                cancelReply(); // Clear the preview bar
+                await addDoc(collection(db, "messages"), msgData);
             };
 
             document.getElementById("file-chooser").onchange = async (e) => {

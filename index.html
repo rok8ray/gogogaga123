@@ -1596,7 +1596,11 @@
             document.getElementById("input-area").onsubmit = async (e) => {
                 e.preventDefault();
                 const val = document.getElementById("msg-input").value;
-                if (!val || !currentServerId) return;
+                // .trim() removes spaces from the start and end.
+                // If the message was "   ", val.trim() becomes "" (empty).
+                if (!val.trim() || !currentServerId) {
+                    return; // Exit the function and do nothing
+                }
                 document.getElementById("msg-input").value = "";
                 await addDoc(collection(db, "messages"), {
                     text: val,

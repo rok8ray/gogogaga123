@@ -237,6 +237,7 @@
                 padding: 0 4px;
                 border-radius: 3px;
                 font-weight: bold;
+                user-select: none;
             }
             #mention:hover {
                 background: rgba(88, 101, 242, 1);
@@ -244,9 +245,12 @@
                 padding: 0 4px;
                 border-radius: 3px;
                 font-weight: bold;
-                cursor: url("/assets/dihpointer.png"), pointer;
+                /* cursor: url("/assets/dihpointer.png"), pointer; */
+                cursor: pointer;
+                -webkit-user-select: none;
+                user-select: none;
             }
-            #mention-suggestions {
+            #mention-s? ~ uggestions {
                 position: absolute;
                 bottom: 70px; /* Position it above the input area */
                 left: 20px;

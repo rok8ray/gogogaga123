@@ -131,6 +131,12 @@
                 font-size: 0.75rem;
                 color: #72767d;
             }
+            #server-sidebar::-webkit-scrollbar,
+            #channel-sidebar::-webkit-scrollbar,
+            #member-sidebar::-webkit-scrollbar,
+            #messages::-webkit-scrollbar {
+                display: none;
+            }
             /* 1. Hide the delete button by default */
             .delete-btn {
                 opacity: 0;
@@ -337,6 +343,19 @@
                 font-family: "Consolas", "Courier New", monospace;
                 color: #e3e3e3;
                 font-size: 0.9em;
+            }
+            /* drag :o */
+            .server-wrapper.dragging {
+                opacity: 0.5;
+                transform: scale(0.9);
+            }
+
+            #server-list {
+                display: flex;
+                flex-direction: column;
+                align-items: center;
+                gap: 8px;
+                min-height: 50px; /* Ensures you can drop into an empty list */
             }
         </style>
     </head>
@@ -906,11 +925,41 @@
                     collection(db, "members"),
                     where("userId", "==", currentUser.uid),
                 );
+
                 onSnapshot(q, (snap) => {
                     const list = document.getElementById("server-list");
                     list.innerHTML = "";
-                    snap.forEach((mDoc) => {
-                        const mData = mDoc.data();
+
+                    // 1. Get all server data from snapshot
+                    let serverDataArray = [];
+                    snap.forEach((mDoc) => serverDataArray.push(mDoc.data()));
+
+                    // 2. Load the saved order from Local Storage
+                    const savedOrder =
+                        JSON.parse(
+                            localStorage.getItem(
+                                `serverOrder_${currentUser.uid}`,
+                            ),
+                        ) || [];
+
+                    // 3. Sort the array based on saved order
+                    if (savedOrder.length > 0) {
+                        serverDataArray.sort((a, b) => {
+                            let indexA = savedOrder.indexOf(a.serverId);
+                            let indexB = savedOrder.indexOf(b.serverId);
+                            // If a new server isn't in the cache yet, put it at the end
+                            if (indexA === -1) return 1;
+                            if (indexB === -1) return -1;
+                            return indexA - indexB;
+                        });
+                    }
+
+                    serverDataArray.forEach((mData) => {
+                        const wrapper = document.createElement("div");
+                        wrapper.className = "server-wrapper";
+                        wrapper.setAttribute("draggable", "true");
+                        wrapper.dataset.id = mData.serverId; // Store ID for reordering
+
                         const el = document.createElement("div");
                         el.className =
                             "server-icon" +
@@ -918,7 +967,7 @@
                                 ? " active"
                                 : "");
 
-                        // --- FETCH LIVE SERVER DATA FOR ICON ---
+                        // --- FETCH LIVE SERVER DATA ---
                         onSnapshot(
                             doc(db, "servers", mData.serverId),
                             (sSnap) => {
@@ -927,7 +976,6 @@
                                     if (sData.icon) {
                                         el.style.backgroundImage = `url('${sData.icon}')`;
                                         el.style.backgroundSize = "cover";
-                                        el.style.backgroundPosition = "center";
                                         el.innerText = "";
                                     } else {
                                         el.innerText =
@@ -937,65 +985,74 @@
                                 }
                             },
                         );
-                        // --------------------------------------
 
-                        // Inside the snap.forEach((mDoc) => { ... }) loop:
                         const badge = document.createElement("div");
                         badge.className = "unread-badge";
                         badge.id = `badge-${mData.serverId}`;
 
-                        // Wrap the icon and badge together
-                        const wrapper = document.createElement("div");
-                        wrapper.className = "server-wrapper";
-                        wrapper.appendChild(el); // This is your existing 'el' (the icon)
+                        wrapper.appendChild(el);
                         wrapper.appendChild(badge);
                         list.appendChild(wrapper);
 
-                        // Setup a listener for NEW messages in this specific server
-                        const msgQuery = query(
-                            collection(db, "messages"),
-                            where("serverId", "==", mData.serverId),
-                            orderBy("createdAt", "desc"),
-                            limit(10), // Just check the most recent ones
+                        // --- DRAG AND DROP EVENTS ---
+                        wrapper.addEventListener("dragstart", () =>
+                            wrapper.classList.add("dragging"),
                         );
-
-                        onSnapshot(msgQuery, (mSnap) => {
-                            const lastRead =
-                                localStorage.getItem(
-                                    `lastRead_${mData.serverId}`,
-                                ) || 0;
-                            let unreadCount = 0;
-
-                            mSnap.forEach((msgDoc) => {
-                                const msgData = msgDoc.data();
-                                if (
-                                    msgData.createdAt &&
-                                    msgData.createdAt.toMillis() > lastRead
-                                ) {
-                                    // Only count messages NOT sent by the current user
-                                    if (msgData.userId !== currentUser.uid) {
-                                        unreadCount++;
-                                    }
-                                }
-                            });
-
-                            if (
-                                unreadCount > 0 &&
-                                mData.serverId !== currentServerId
-                            ) {
-                                badge.innerText =
-                                    unreadCount > 9 ? "9+" : unreadCount;
-                                badge.classList.add("show");
-                            } else {
-                                badge.classList.remove("show");
-                            }
+                        wrapper.addEventListener("dragend", () => {
+                            wrapper.classList.remove("dragging");
+                            saveServerOrder(); // Save to cache when dropped
                         });
 
                         el.onclick = () =>
                             selectServer(mData.serverId, mData.serverName);
-                        list.appendChild(el);
                     });
                 });
+            }
+
+            // Helper to save the current DOM order to LocalStorage
+            function saveServerOrder() {
+                const list = document.getElementById("server-list");
+                const wrappers = list.querySelectorAll(".server-wrapper");
+                const order = Array.from(wrappers).map((w) => w.dataset.id);
+                localStorage.setItem(
+                    `serverOrder_${currentUser.uid}`,
+                    JSON.stringify(order),
+                );
+            }
+
+            // Add the dragover logic to the container
+            document
+                .getElementById("server-list")
+                .addEventListener("dragover", (e) => {
+                    e.preventDefault();
+                    const list = document.getElementById("server-list");
+                    const afterElement = getDragAfterElement(list, e.clientY);
+                    const dragging = document.querySelector(".dragging");
+                    if (afterElement == null) {
+                        list.appendChild(dragging);
+                    } else {
+                        list.insertBefore(dragging, afterElement);
+                    }
+                });
+
+            function getDragAfterElement(container, y) {
+                const draggableElements = [
+                    ...container.querySelectorAll(
+                        ".server-wrapper:not(.dragging)",
+                    ),
+                ];
+                return draggableElements.reduce(
+                    (closest, child) => {
+                        const box = child.getBoundingClientRect();
+                        const offset = y - box.top - box.height / 2;
+                        if (offset < 0 && offset > closest.offset) {
+                            return { offset: offset, element: child };
+                        } else {
+                            return closest;
+                        }
+                    },
+                    { offset: Number.NEGATIVE_INFINITY },
+                ).element;
             }
 
             // --- IDLE / VISIBILITY TRACKING ---

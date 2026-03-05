@@ -338,37 +338,6 @@
                 color: #e3e3e3;
                 font-size: 0.9em;
             }
-
-            /* The small preview bar above the input when replying */
-            #reply-preview {
-                background: #2f3136;
-                padding: 5px 15px;
-                display: flex;
-                justify-content: space-between;
-                align-items: center;
-                font-size: 12px;
-                border-top-left-radius: 8px;
-                border-top-right-radius: 8px;
-                border-bottom: 1px solid #222;
-            }
-
-            /* The tiny curved line/text for the reply inside the chat */
-            .reply-context {
-                font-size: 12px;
-                color: #b9bbbe;
-                margin-bottom: 4px;
-                display: flex;
-                align-items: center;
-                gap: 5px;
-            }
-            .reply-context::before {
-                content: "";
-                width: 15px;
-                height: 8px;
-                border-left: 2px solid #4f545c;
-                border-top: 2px solid #4f545c;
-                border-top-left-radius: 4px;
-            }
         </style>
     </head>
     <body>
@@ -510,10 +479,6 @@
             </div>
             <ul id="messages"></ul>
             <div id="mention-suggestions" class="hidden"></div>
-            <div id="reply-preview" style="display: none">
-                <span id="reply-text"></span>
-                <span onclick="cancelReply()" style="cursor: pointer">✕</span>
-            </div>
             <form id="input-area">
                 <input
                     id="msg-input"
@@ -796,26 +761,6 @@
                     });
                 });
             }
-
-            // --- REPLIES ---
-            let replyToId = null;
-
-            window.setReply = (msgId, user, text) => {
-                replyToId = msgId;
-                const preview = document.getElementById("reply-preview");
-                const previewText = document.getElementById("reply-text");
-                preview.style.display = "flex";
-                previewText.innerText = `Replying to ${user}: ${text.substring(0, 30)}...`;
-                document.getElementById("msg-input").focus();
-            };
-
-            window.cancelReply = () => {
-                replyToId = null;
-                document.getElementById("reply-preview").style.display = "none";
-            };
-
-            // Add this into your loadMessages loop where you define deleteBtn
-            const replyBtn = `<span class="delete-btn" style="color: #b9bbbe;" onclick="setReply('${messageId}', '${senderName}', '${data.text.replace(/'/g, "\\'")}')">💬</span>`;
 
             // --- MEMBER SIDEBAR TOGGLE ---
             window.toggleMembers = () => {
@@ -1353,11 +1298,7 @@
                     );
                 }
 
-                if (
-                    !confirm(
-                        "Are you sure you want to kick this guy bro (mod abuse is bad 🤬🚨",
-                    )
-                )
+                if (!confirm("Are you sure you want to kick this member?"))
                     return;
 
                 try {
@@ -1475,6 +1416,7 @@
                             mData.userId.substring(0, 5);
                     });
 
+                    // 2. Setup the real-time message listener
                     const q = query(
                         collection(db, "messages"),
                         where("serverId", "==", serverId),
@@ -1488,9 +1430,15 @@
                         const docs = [...snap.docs].reverse();
                         let lastMsg = null;
 
-                        docs.forEach((docSnap) => {
-                            const data = docSnap.data();
-                            const messageId = docSnap.id;
+                        // Helper function for images
+                        const checkIsImg = (url) =>
+                            typeof url === "string" &&
+                            (url.startsWith("data:image") ||
+                                /\.(jpg|jpeg|png|gif)$/i.test(url));
+
+                        docs.forEach((doc) => {
+                            const data = doc.data();
+                            const messageId = doc.id;
                             const createdAt = data.createdAt?.toDate();
                             const time = createdAt
                                 ? createdAt.toLocaleTimeString([], {
@@ -1498,80 +1446,164 @@
                                       minute: "2-digit",
                                   })
                                 : "...";
+
+                            let content = data.text;
+
+                            // --- NEW PROCESSING LOGIC ---
+                            // We use an IF/ELSE block so we don't try to "linkify" images or assignments
+                            if (data.isAssignment) {
+                                content = `
+                                    <div style="background: #e8f0fe; border-left: 5px solid #1967d2; padding: 12px; border-radius: 4px; color: #1967d2; margin-top: 5px; max-width: 300px;">
+                                        <div style="font-weight: bold; font-size: 14px; margin-bottom: 4px;">📚 ${data.assignmentTitle}</div>
+                                        <a href="${data.text}" target="_blank" style="display: inline-block; background: #1967d2; color: white; padding: 5px 12px; border-radius: 4px; text-decoration: none; font-size: 12px; font-weight: bold;">
+                                            Open in Classroom
+                                        </a>
+                                    </div>`;
+                            } else if (checkIsImg(data.text)) {
+                                content = `<img src="${data.text}" style="max-width: 100%; max-height: 300px; border-radius: 8px; display: block; margin-top: 5px;">`;
+                            } else {
+                                // --- REGEX PARSING FOR PLAIN TEXT ---
+
+                                // --- CODE STRING LOGIC ---
+                                // This looks for anything between ` ` and wraps it in <code> tags
+                                const codeRegex = /`([^`]+)`/g;
+                                content = content.replace(
+                                    codeRegex,
+                                    (match, codeText) => {
+                                        // We escape the codeText to prevent accidental HTML injection
+                                        const escaped = codeText
+                                            .replace(/</g, "&lt;")
+                                            .replace(/>/g, "&gt;");
+                                        return `<code>${escaped}</code>`;
+                                    },
+                                );
+
+                                // A. Loudspeaker
+                                if (content.includes("📢")) {
+                                    content = `<span class="loud">${content.replace(/📢/g, "")}</span>`;
+                                }
+
+                                // B. YouTube Standard
+                                const youtubeRegex =
+                                    /https:\/\/www\.youtube\.com\/watch\?v=([a-zA-Z0-9_-]+)/g;
+                                content = content.replace(
+                                    youtubeRegex,
+                                    (match, videoId) => {
+                                        return `<iframe width="560" height="315" src="https://www.youtube.com/embed/${videoId}" frameborder="0" allowfullscreen></iframe>`;
+                                    },
+                                );
+
+                                // C. YouTube Shorts
+                                const shortRegex =
+                                    /https:\/\/www\.youtube\.com\/shorts\/([a-zA-Z0-9_-]+)/g;
+                                content = content.replace(
+                                    shortRegex,
+                                    (match, videoId) => {
+                                        return `<iframe width="315" height="560" src="https://www.youtube.com/embed/${videoId}" frameborder="0" allowfullscreen style="border-radius:8px;"></iframe>`;
+                                    },
+                                );
+
+                                // D. Mentions
+                                // This regex looks for @ followed by any characters until a space or end of string
+                                // D. Mentions
+                                // Look for @ followed by any text
+                                const mentionRegex = /@(.+?)(?=\s|$|[.,!?;])/g;
+
+                                content = content.replace(
+                                    /@([^\s,?.!]+(?:\s[^\s,?.!]+)*)/g,
+                                    (match, fullAttempt) => {
+                                        const usernames =
+                                            Object.values(memberMap);
+
+                                        // Sort names by length descending (Longest names first)
+                                        const sortedUsernames = usernames.sort(
+                                            (a, b) => b.length - a.length,
+                                        );
+
+                                        for (let name of sortedUsernames) {
+                                            const cleanName = name.trim();
+                                            // Check if the text immediately following the @ starts with a known username
+                                            if (
+                                                fullAttempt
+                                                    .toLowerCase()
+                                                    .startsWith(
+                                                        cleanName.toLowerCase(),
+                                                    )
+                                            ) {
+                                                const actualNameInText =
+                                                    fullAttempt.substring(
+                                                        0,
+                                                        cleanName.length,
+                                                    );
+                                                const remainingText =
+                                                    fullAttempt.substring(
+                                                        cleanName.length,
+                                                    );
+
+                                                return `<span id="mention">@${actualNameInText}</span>${remainingText}`;
+                                            }
+                                        }
+                                        return match; // No user found, leave it as plain text
+                                    },
+                                );
+
+                                // E. General Links (Last)
+                                // This avoids links already inside HTML tags or pointing to YouTube/Images
+
+                                const urlRegex =
+                                    /https?:\/\/(?!(www\.)?(youtube\.com|youtu\.be))(?![^"'>]*\.(?:png|jpg|jpeg|gif))(?![^<]*>)[^\s]+/g;
+                                content = content.replace(urlRegex, (url) => {
+                                    return `<a href="${url}" target="_blank" rel="noopener noreferrer">${url}</a>`;
+                                });
+                            }
+                            // -----------------------------
+
                             const senderName =
-                                memberMap[data.userId] || "Unknown User";
+                                memberMap[data.userId] ||
+                                data.user ||
+                                "Unknown User";
                             const isSender = data.userId === currentUser.uid;
                             const isOwner =
                                 currentUser.uid === currentServerOwner;
 
-                            // Define content logic here
-                            let content = data.text;
-                            if (data.isAssignment) {
-                                content = `<div style="background: #e8f0fe; padding: 10px;">📚 ${data.assignmentTitle}</div>`;
-                            }
-
-                            // Define Buttons
                             const deleteBtn =
                                 isSender || isOwner
                                     ? `<span class="delete-btn" onclick="deleteMessage('${messageId}')">❌</span>`
                                     : "";
-                            const replyBtn = `<span class="delete-btn" style="color: #b9bbbe;" onclick="setReply('${messageId}', '${senderName}', '${data.text.replace(/'/g, "\\'")}')">💬</span>`;
-
-                            // Handle Reply Context
-                            let replyHTML = "";
-                            if (data.replyTo) {
-                                const originalMsg = docs.find(
-                                    (d) => d.id === data.replyTo,
-                                );
-                                const originalText = originalMsg
-                                    ? originalMsg.data().text
-                                    : "Original message deleted";
-                                const originalUser = originalMsg
-                                    ? memberMap[originalMsg.data().userId] ||
-                                      "User"
-                                    : "User";
-                                replyHTML = `<div class="reply-context">${originalUser}: ${originalText.substring(0, 40)}...</div>`;
-                            }
 
                             const li = document.createElement("li");
+
+                            // Grouping Logic
                             if (
                                 lastMsg &&
                                 lastMsg.userId === data.userId &&
                                 createdAt - lastMsg.createdAt?.toDate() < 300000
                             ) {
                                 li.className = "grouped";
-                                li.innerHTML = `${replyHTML}<div>${content} ${replyBtn} ${deleteBtn}</div>`;
+                                li.innerHTML = `<div>${content} ${deleteBtn}</div>`;
                             } else {
-                                li.innerHTML = `${replyHTML}<span class="msg-user">${senderName}</span><span class="msg-time">${time}</span> ${replyBtn} ${deleteBtn}<br>${content}`;
+                                li.innerHTML = `<span class="msg-user">${senderName}</span><span class="msg-time">${time}</span> ${deleteBtn}<br>${content}`;
                             }
 
                             list.appendChild(li);
                             lastMsg = { ...data, createdAt: data.createdAt };
-                        });
+                        }); // End docs.forEach
                         list.scrollTop = list.scrollHeight;
-                    });
-                });
+                    }); // End onSnapshot
+                }); // End getDocs.then
             } // End loadMessages
 
             document.getElementById("input-area").onsubmit = async (e) => {
                 e.preventDefault();
                 const val = document.getElementById("msg-input").value;
-                if (!val.trim() || !currentServerId) return;
-
-                const msgData = {
+                if (!val || !currentServerId) return;
+                document.getElementById("msg-input").value = "";
+                await addDoc(collection(db, "messages"), {
                     text: val,
                     userId: auth.currentUser.uid,
                     serverId: currentServerId,
                     createdAt: serverTimestamp(),
-                };
-
-                if (replyToId) {
-                    msgData.replyTo = replyToId; // Link to the original message
-                }
-
-                document.getElementById("msg-input").value = "";
-                cancelReply(); // Clear the preview bar
-                await addDoc(collection(db, "messages"), msgData);
+                });
             };
 
             document.getElementById("file-chooser").onchange = async (e) => {

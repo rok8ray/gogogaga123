@@ -131,6 +131,12 @@
                 font-size: 0.75rem;
                 color: #72767d;
             }
+            #server-sidebar::-webkit-scrollbar,
+            #channel-sidebar::-webkit-scrollbar,
+            #member-sidebar::-webkit-scrollbar,
+            #messages::-webkit-scrollbar {
+                display: none;
+            }
             /* 1. Hide the delete button by default */
             .delete-btn {
                 opacity: 0;
@@ -337,6 +343,20 @@
                 font-family: "Consolas", "Courier New", monospace;
                 color: #e3e3e3;
                 font-size: 0.9em;
+            }
+
+            /* drag and drop :o */
+            .server-wrapper.dragging {
+                opacity: 0.4;
+                cursor: move;
+            }
+
+            #server-list {
+                display: flex;
+                flex-direction: column;
+                align-items: center;
+                gap: 8px;
+                min-height: 100px; /* Gives you room to drop if the list is short */
             }
         </style>
     </head>
@@ -906,11 +926,38 @@
                     collection(db, "members"),
                     where("userId", "==", currentUser.uid),
                 );
+
                 onSnapshot(q, (snap) => {
                     const list = document.getElementById("server-list");
                     list.innerHTML = "";
+
+                    // 1. Convert snapshot to an array so we can sort it
+                    let serversArray = [];
                     snap.forEach((mDoc) => {
-                        const mData = mDoc.data();
+                        serversArray.push(mDoc.data());
+                    });
+
+                    // 2. Load the saved order from cache
+                    const savedOrder =
+                        JSON.parse(
+                            localStorage.getItem(
+                                `serverOrder_${currentUser.uid}`,
+                            ),
+                        ) || [];
+
+                    // 3. Sort the array based on the cached IDs
+                    if (savedOrder.length > 0) {
+                        serversArray.sort((a, b) => {
+                            let indexA = savedOrder.indexOf(a.serverId);
+                            let indexB = savedOrder.indexOf(b.serverId);
+                            if (indexA === -1) return 1;
+                            if (indexB === -1) return -1;
+                            return indexA - indexB;
+                        });
+                    }
+
+                    // 4. Render the sorted list
+                    serversArray.forEach((mData) => {
                         const el = document.createElement("div");
                         el.className =
                             "server-icon" +
@@ -937,26 +984,27 @@
                                 }
                             },
                         );
-                        // --------------------------------------
 
-                        // Inside the snap.forEach((mDoc) => { ... }) loop:
                         const badge = document.createElement("div");
                         badge.className = "unread-badge";
                         badge.id = `badge-${mData.serverId}`;
 
-                        // Wrap the icon and badge together
+                        // --- WRAPPER + DRAG SETUP ---
                         const wrapper = document.createElement("div");
                         wrapper.className = "server-wrapper";
-                        wrapper.appendChild(el); // This is your existing 'el' (the icon)
+                        wrapper.setAttribute("draggable", "true");
+                        wrapper.dataset.id = mData.serverId; // Crucial for saving the order
+
+                        wrapper.appendChild(el);
                         wrapper.appendChild(badge);
                         list.appendChild(wrapper);
 
-                        // Setup a listener for NEW messages in this specific server
+                        // Setup a listener for NEW messages
                         const msgQuery = query(
                             collection(db, "messages"),
                             where("serverId", "==", mData.serverId),
                             orderBy("createdAt", "desc"),
-                            limit(10), // Just check the most recent ones
+                            limit(10),
                         );
 
                         onSnapshot(msgQuery, (mSnap) => {
@@ -965,17 +1013,14 @@
                                     `lastRead_${mData.serverId}`,
                                 ) || 0;
                             let unreadCount = 0;
-
                             mSnap.forEach((msgDoc) => {
                                 const msgData = msgDoc.data();
                                 if (
                                     msgData.createdAt &&
                                     msgData.createdAt.toMillis() > lastRead
                                 ) {
-                                    // Only count messages NOT sent by the current user
-                                    if (msgData.userId !== currentUser.uid) {
+                                    if (msgData.userId !== currentUser.uid)
                                         unreadCount++;
-                                    }
                                 }
                             });
 
@@ -991,11 +1036,68 @@
                             }
                         });
 
+                        // --- DRAG EVENTS ---
+                        wrapper.addEventListener("dragstart", () =>
+                            wrapper.classList.add("dragging"),
+                        );
+                        wrapper.addEventListener("dragend", () => {
+                            wrapper.classList.remove("dragging");
+                            saveServerOrder(); // Update cache when movement stops
+                        });
+
                         el.onclick = () =>
                             selectServer(mData.serverId, mData.serverName);
-                        list.appendChild(el);
                     });
                 });
+            }
+
+            // --- HELPER FUNCTIONS (Place these outside loadUserServers) ---
+
+            function saveServerOrder() {
+                const list = document.getElementById("server-list");
+                const wrappers = list.querySelectorAll(".server-wrapper");
+                const order = Array.from(wrappers).map((w) => w.dataset.id);
+                localStorage.setItem(
+                    `serverOrder_${currentUser.uid}`,
+                    JSON.stringify(order),
+                );
+            }
+
+            // Main container listener for the "hover" effect during drag
+            document
+                .getElementById("server-list")
+                .addEventListener("dragover", (e) => {
+                    e.preventDefault();
+                    const list = document.getElementById("server-list");
+                    const afterElement = getDragAfterElement(list, e.clientY);
+                    const dragging = document.querySelector(".dragging");
+                    if (dragging) {
+                        if (afterElement == null) {
+                            list.appendChild(dragging);
+                        } else {
+                            list.insertBefore(dragging, afterElement);
+                        }
+                    }
+                });
+
+            function getDragAfterElement(container, y) {
+                const draggableElements = [
+                    ...container.querySelectorAll(
+                        ".server-wrapper:not(.dragging)",
+                    ),
+                ];
+                return draggableElements.reduce(
+                    (closest, child) => {
+                        const box = child.getBoundingClientRect();
+                        const offset = y - box.top - box.height / 2;
+                        if (offset < 0 && offset > closest.offset) {
+                            return { offset: offset, element: child };
+                        } else {
+                            return closest;
+                        }
+                    },
+                    { offset: Number.NEGATIVE_INFINITY },
+                ).element;
             }
 
             // --- IDLE / VISIBILITY TRACKING ---

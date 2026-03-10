@@ -499,6 +499,21 @@
             </div>
             <ul id="messages"></ul>
             <div id="mention-suggestions" class="hidden"></div>
+            <div
+                id="emoji-bar"
+                style="
+                    display: none;
+                    background: #2f3136;
+                    padding: 10px;
+                    border-bottom: 1px solid #222;
+                    overflow-x: auto;
+                    white-space: nowrap;
+                "
+            >
+                <div id="emoji-list" style="display: flex; gap: 10px"></div>
+            </div>
+
+            <form id="input-area"></form>
             <form id="input-area">
                 <input
                     id="msg-input"
@@ -787,6 +802,97 @@
                 const sidebar = document.getElementById("member-sidebar");
                 sidebar.classList.toggle("hidden");
             };
+
+            // --- AUTOMATED EMOJI BAR LOGIC ---
+            const emojiBar = document.getElementById("emoji-bar");
+            const emojiList = document.getElementById("emoji-list");
+            const msgInput = document.getElementById("msg-input");
+
+            msgInput.addEventListener("input", (e) => {
+                const val = e.target.value;
+                // Get the cursor position
+                const cursorPos = e.target.selectionStart;
+                // Get text before cursor
+                const textBeforeCursor = val.substring(0, cursorPos);
+
+                // Check if the user just typed a colon or is typing after one
+                if (textBeforeCursor.includes(":")) {
+                    const lastColonIndex = textBeforeCursor.lastIndexOf(":");
+                    const query = textBeforeCursor.substring(
+                        lastColonIndex + 1,
+                    );
+
+                    // Only open if there's no space between the colon and cursor
+                    if (!query.includes(" ")) {
+                        openEmojiBarWithFilter(query);
+                    } else {
+                        emojiBar.style.display = "none";
+                    }
+                } else {
+                    emojiBar.style.display = "none";
+                }
+            });
+            async function openEmojiBarWithFilter(query) {
+                try {
+                    const response = await fetch("/assets/emojis.json");
+                    const allEmojis = await response.json();
+
+                    // Filter emojis based on what the user typed
+                    const filtered = allEmojis.filter((name) =>
+                        name.toLowerCase().includes(query.toLowerCase()),
+                    );
+
+                    if (filtered.length > 0) {
+                        renderEmojiBar(filtered);
+                        emojiBar.style.display = "block";
+                    } else {
+                        emojiBar.style.display = "none";
+                    }
+                } catch (err) {
+                    console.error("Emoji list fetch failed", err);
+                }
+            }
+
+            function renderEmojiBar(emojis) {
+                emojiList.innerHTML = "";
+
+                emojis.forEach((name) => {
+                    const img = document.createElement("img");
+                    img.src = `/assets/emojis/${name}.png`;
+                    img.style.cssText =
+                        "width: 28px; height: 28px; cursor: pointer; padding: 5px; border-radius: 4px; background: #40444b;";
+
+                    img.onerror = () => {
+                        if (img.src.endsWith(".png"))
+                            img.src = `/assets/emojis/${name}.PNG`;
+                        else if (img.src.endsWith(".PNG"))
+                            img.src = `/assets/emojis/${name}.gif`;
+                        else if (img.src.endsWith(".gif"))
+                            img.src = `/assets/emojis/${name}.GIF`;
+                    };
+
+                    img.onclick = () => {
+                        const val = msgInput.value;
+                        const cursorPos = msgInput.selectionStart;
+                        const textBefore = val.substring(0, cursorPos);
+                        const textAfter = val.substring(cursorPos);
+
+                        // Find the colon we are currently typing after
+                        const lastColonIndex = textBefore.lastIndexOf(":");
+
+                        // Reconstruct the string: [text before colon] + [:emoji:] + [text after]
+                        msgInput.value =
+                            textBefore.substring(0, lastColonIndex) +
+                            `:${name}: ` +
+                            textAfter;
+
+                        emojiBar.style.display = "none";
+                        msgInput.focus();
+                    };
+
+                    emojiList.appendChild(img);
+                });
+            }
 
             // --- BLACKLIST SIDEBAR TOGGLE ---
             window.toggleBlacklistSidebar = () => {

@@ -1490,8 +1490,15 @@
             };
 
             // --- MESSAGES & DELETION ---
-            window.deleteMessage = async (messageId) => {
-                if (!confirm("Delete this message?")) return;
+            window.deleteMessage = async (messageId, event) => {
+                // Check if Shift key was held during the click
+                const shiftPressed = event && event.shiftKey;
+
+                // Only ask for confirmation if Shift is NOT pressed
+                if (!shiftPressed) {
+                    if (!confirm("Delete this message?")) return;
+                }
+
                 try {
                     await deleteDoc(doc(db, "messages", messageId));
                 } catch (err) {
@@ -1502,7 +1509,6 @@
             function loadMessages(serverId) {
                 if (unsubMessages) unsubMessages();
 
-                // 1. Load all members for this server once to map UIDs to names
                 const membersQ = query(
                     collection(db, "members"),
                     where("serverId", "==", serverId),
@@ -1518,7 +1524,6 @@
                             mData.userId.substring(0, 5);
                     });
 
-                    // 2. Setup the real-time message listener
                     const q = query(
                         collection(db, "messages"),
                         where("serverId", "==", serverId),
@@ -1528,11 +1533,18 @@
 
                     unsubMessages = onSnapshot(q, (snap) => {
                         const list = document.getElementById("messages");
+
+                        // --- SCROLL CHECK ---
+                        // Determine if the user is at the bottom before we clear the list
+                        // We use a 50px buffer to account for rounding/padding
+                        const isAtBottom =
+                            list.scrollHeight - list.scrollTop <=
+                            list.clientHeight + 50;
+
                         list.innerHTML = "";
                         const docs = [...snap.docs].reverse();
                         let lastMsg = null;
 
-                        // Helper function for images
                         const checkIsImg = (url) =>
                             typeof url === "string" &&
                             (url.startsWith("data:image") ||
@@ -1551,8 +1563,6 @@
 
                             let content = data.text;
 
-                            // --- NEW PROCESSING LOGIC ---
-                            // We use an IF/ELSE block so we don't try to "linkify" images or assignments
                             if (data.isAssignment) {
                                 content = `
                                     <div style="background: #e8f0fe; border-left: 5px solid #1967d2; padding: 12px; border-radius: 4px; color: #1967d2; margin-top: 5px; max-width: 300px;">
@@ -1564,15 +1574,10 @@
                             } else if (checkIsImg(data.text)) {
                                 content = `<img src="${data.text}" style="max-width: 100%; max-height: 300px; border-radius: 8px; display: block; margin-top: 5px;">`;
                             } else {
-                                // --- REGEX PARSING FOR PLAIN TEXT ---
-
-                                // --- CODE STRING LOGIC ---
-                                // This looks for anything between ` ` and wraps it in <code> tags
                                 const codeRegex = /`([^`]+)`/g;
                                 content = content.replace(
                                     codeRegex,
                                     (match, codeText) => {
-                                        // We escape the codeText to prevent accidental HTML injection
                                         const escaped = codeText
                                             .replace(/</g, "&lt;")
                                             .replace(/>/g, "&gt;");
@@ -1580,12 +1585,10 @@
                                     },
                                 );
 
-                                // A. Loudspeaker
                                 if (content.includes("📢")) {
                                     content = `<span class="loud">${content.replace(/📢/g, "")}</span>`;
                                 }
 
-                                // B. YouTube Standard
                                 const youtubeRegex =
                                     /https:\/\/www\.youtube\.com\/watch\?v=([a-zA-Z0-9_-]+)/g;
                                 content = content.replace(
@@ -1595,7 +1598,6 @@
                                     },
                                 );
 
-                                // C. YouTube Shorts
                                 const shortRegex =
                                     /https:\/\/www\.youtube\.com\/shorts\/([a-zA-Z0-9_-]+)/g;
                                 content = content.replace(
@@ -1605,26 +1607,17 @@
                                     },
                                 );
 
-                                // D. Mentions
-                                // This regex looks for @ followed by any characters until a space or end of string
-                                // D. Mentions
-                                // Look for @ followed by any text
-                                const mentionRegex = /@(.+?)(?=\s|$|[.,!?;])/g;
-
                                 content = content.replace(
                                     /@([^\s,?.!]+(?:\s[^\s,?.!]+)*)/g,
                                     (match, fullAttempt) => {
                                         const usernames =
                                             Object.values(memberMap);
-
-                                        // Sort names by length descending (Longest names first)
                                         const sortedUsernames = usernames.sort(
                                             (a, b) => b.length - a.length,
                                         );
 
                                         for (let name of sortedUsernames) {
                                             const cleanName = name.trim();
-                                            // Check if the text immediately following the @ starts with a known username
                                             if (
                                                 fullAttempt
                                                     .toLowerCase()
@@ -1641,16 +1634,12 @@
                                                     fullAttempt.substring(
                                                         cleanName.length,
                                                     );
-
                                                 return `<span id="mention">@${actualNameInText}</span>${remainingText}`;
                                             }
                                         }
-                                        return match; // No user found, leave it as plain text
+                                        return match;
                                     },
                                 );
-
-                                // E. General Links (Last)
-                                // This avoids links already inside HTML tags or pointing to YouTube/Images
 
                                 const urlRegex =
                                     /https?:\/\/(?!(www\.)?(youtube\.com|youtu\.be))(?![^"'>]*\.(?:png|jpg|jpeg|gif))(?![^<]*>)[^\s]+/g;
@@ -1658,7 +1647,20 @@
                                     return `<a href="${url}" target="_blank" rel="noopener noreferrer">${url}</a>`;
                                 });
                             }
-                            // -----------------------------
+                            // --- CUSTOM EMOJI LOGIC (:emoji:) ---
+                            // This looks for :name: and turns it into an image
+                            const emojiRegex = /:([a-zA-Z0-9_]{2,15}):/g;
+                            content = content.replace(
+                                emojiRegex,
+                                (match, emojiName) => {
+                                    const name = emojiName.toLowerCase();
+                                    // Try PNG first, if it fails, try GIF. If that fails, show the text.
+                                    return `<img src="/assets/emojis/${name}.png" 
+                                             class="custom-emoji"
+                                             style="width: 22px; height: 22px; vertical-align: middle;"
+                                             onerror="if(this.src.endsWith('.png')){this.src='/assets/emojis/${name}.gif'}else{this.replaceWith(':${emojiName}:')}">`;
+                                },
+                            );
 
                             const senderName =
                                 memberMap[data.userId] ||
@@ -1670,12 +1672,11 @@
 
                             const deleteBtn =
                                 isSender || isOwner
-                                    ? `<span class="delete-btn" onclick="deleteMessage('${messageId}')">❌</span>`
+                                    ? `<span class="delete-btn" onclick="deleteMessage('${messageId}', event)">❌</span>`
                                     : "";
 
                             const li = document.createElement("li");
 
-                            // Grouping Logic
                             if (
                                 lastMsg &&
                                 lastMsg.userId === data.userId &&
@@ -1689,11 +1690,16 @@
 
                             list.appendChild(li);
                             lastMsg = { ...data, createdAt: data.createdAt };
-                        }); // End docs.forEach
-                        list.scrollTop = list.scrollHeight;
-                    }); // End onSnapshot
-                }); // End getDocs.then
-            } // End loadMessages
+                        });
+
+                        // --- SMART SCROLL EXECUTION ---
+                        // Only scroll to bottom if the user was already there
+                        if (isAtBottom) {
+                            list.scrollTop = list.scrollHeight;
+                        }
+                    });
+                });
+            }
 
             document.getElementById("input-area").onsubmit = async (e) => {
                 e.preventDefault();
